@@ -6,7 +6,6 @@ from typing import Annotated, Literal, TypeAlias, Self
 import duckdb
 from duckdb import DuckDBPyConnection
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator, ValidationError
 from pypika import Order
