@@ -2,6 +2,7 @@ import logging
 import sys
 from dataclasses import asdict, dataclass
 from typing import Annotated, Literal, TypeAlias, Self
+import src.constants as constants
 
 import duckdb
 from duckdb import DuckDBPyConnection
@@ -20,25 +21,6 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-
-DB_NAME = "data/ngrams.duckdb"
-PREPROCESSED_TABLE_NAME = "gold_ngram_2000_2022"
-UNPROCESSED_TABLE_NAME = "gold_ngrams_sorted"
-
-PROCESSED_DATA_START_YEAR = 2000
-PROCESSED_DATA_END_YEAR = 2019
-
-RAW_DATA_START_YEAR = 1470
-RAW_DATA_END_YEAR = 2019
-
-POS_TAG_MAP: dict[str, str] = {
-    "Adjective": "_adj",
-    "Adposition": "_adp",
-    "Verb": "_verb",
-    "Noun": "_noun",
-    "Adverb": "_adv",
-    "Conjunction": "_conj",
-}
 
 PosTag: TypeAlias = Literal[
     "Adjective", "Adposition", "Verb", "Noun", "Adverb", "Conjunction"
@@ -60,10 +42,10 @@ class FilterParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     start_year: int = Field(
-        default=PROCESSED_DATA_START_YEAR, ge=RAW_DATA_START_YEAR, le=RAW_DATA_END_YEAR
+        default=constants.PROCESSED_DATA_START_YEAR, ge=constants.RAW_DATA_START_YEAR, le=constants.RAW_DATA_END_YEAR
     )
     end_year: int = Field(
-        default=PROCESSED_DATA_END_YEAR, ge=RAW_DATA_START_YEAR, le=RAW_DATA_END_YEAR
+        default=constants.PROCESSED_DATA_END_YEAR, ge=constants.RAW_DATA_START_YEAR, le=constants.RAW_DATA_END_YEAR
     )
     pos_tag: PosTag | None = None
 
@@ -127,22 +109,22 @@ async def get_top_words(
         raise HTTPException(status_code=400, detail="start_year must be <= end_year")
 
     using_preprocessed = (
-        filter_params.start_year == PROCESSED_DATA_START_YEAR
-        and filter_params.end_year == PROCESSED_DATA_END_YEAR
+        filter_params.start_year == constants.PROCESSED_DATA_START_YEAR
+        and filter_params.end_year == constants.PROCESSED_DATA_END_YEAR
     )
 
     if using_preprocessed:
-        table = Table(PREPROCESSED_TABLE_NAME)
+        table = Table(constants.PREPROCESSED_TABLE_NAME)
         sql = _build_preprocessed_query(table, word_number)
     else:
-        table = Table(UNPROCESSED_TABLE_NAME)
+        table = Table(constants.UNPROCESSED_TABLE_NAME)
         sql = _build_unprocessed_query(
             table, word_number, filter_params.start_year, filter_params.end_year
         )
 
     logger.info("Executing query: %s", sql)
 
-    with duckdb.connect(database=DB_NAME, read_only=True) as db:
+    with duckdb.connect(database=constants.DB_NAME, read_only=True) as db:
         rows = db.execute(sql)
         response = _build_response(rows)
 
