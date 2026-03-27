@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Ruff Dir
+.ruff-cache
+
+# Project Env File
+.env
+
+# VSCode Files
+.vscode
+
+# GCP Creds
+word-frequency-api-eb26be786485.json
+
+# Local testing dataset
+*.duckdb
