@@ -2,7 +2,6 @@ import logging
 import sys
 from dataclasses import asdict, dataclass
 from typing import Annotated, Literal, TypeAlias, Self
-import src.constants as constants
 
 import duckdb
 from duckdb import DuckDBPyConnection
@@ -13,6 +12,8 @@ from pypika import Order
 from pypika import Query as PikaQuery
 from pypika import Table
 from pypika import functions as fn
+
+from src import constants
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,11 @@ PosTag: TypeAlias = Literal[
 
 app = FastAPI()
 
-#Cannot catch RequestValidationError as Depends() causes FastApi not to wrap ValidationError in RequestValidationError
+
+# Cannot catch RequestValidationError as Depends() causes FastApi not to wrap ValidationError in RequestValidationError
 @app.exception_handler(ValidationError)
 async def validation_handler(request: Request, exc: ValidationError):
-    errors = [
-        {"msg": e["msg"]}
-        for e in exc.errors()
-    ]
+    errors = [{"msg": e["msg"]} for e in exc.errors()]
     return JSONResponse(status_code=422, content={"detail": errors})
 
 
@@ -42,19 +41,26 @@ class FilterParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     start_year: int = Field(
-        default=constants.PROCESSED_DATA_START_YEAR, ge=constants.RAW_DATA_START_YEAR, le=constants.RAW_DATA_END_YEAR
+        default=constants.PROCESSED_DATA_START_YEAR,
+        ge=constants.RAW_DATA_START_YEAR,
+        le=constants.RAW_DATA_END_YEAR,
     )
     end_year: int = Field(
-        default=constants.PROCESSED_DATA_END_YEAR, ge=constants.RAW_DATA_START_YEAR, le=constants.RAW_DATA_END_YEAR
+        default=constants.PROCESSED_DATA_END_YEAR,
+        ge=constants.RAW_DATA_START_YEAR,
+        le=constants.RAW_DATA_END_YEAR,
     )
     pos_tag: PosTag | None = None
 
     @model_validator(mode="after")
     def check_year_order(self) -> Self:
         if self.start_year > self.end_year:
-            raise ValueError(f"start_year ({self.start_year}) must be <= end_year ({self.end_year})")
- 
+            raise ValueError(
+                f"start_year ({self.start_year}) must be <= end_year ({self.end_year})"
+            )
+
         return self
+
 
 @dataclass(frozen=True)
 class WordEntry:
