@@ -105,11 +105,13 @@ def _build_unprocessed_query(
 
 # TODO: Create a list of words to exclude from the word list
 # TODO: Apply pos_tag filter using POS_TAG_MAP
-#TODO: This is not quite async
+# TODO: This is not quite async
 @app.get("/top-words")
 async def get_top_words(
     filter_params: Annotated[FilterParams, Depends()],
-    word_number: Annotated[int, Query(ge=constants.TOP_WORDS_MIN_LIMIT, le=constants.TOP_WORDS_MAX_LIMIT)] = constants.TOP_WORDS_DEFAULT_LIMIT,
+    word_number: Annotated[
+        int, Query(ge=constants.TOP_WORDS_MIN_LIMIT, le=constants.TOP_WORDS_MAX_LIMIT)
+    ] = constants.TOP_WORDS_DEFAULT_LIMIT,
 ) -> FrequencyResponse:
 
     if filter_params.start_year > filter_params.end_year:
