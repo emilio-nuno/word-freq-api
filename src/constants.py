@@ -8,6 +8,10 @@ PROCESSED_DATA_END_YEAR = 2019
 RAW_DATA_START_YEAR = 1470
 RAW_DATA_END_YEAR = 2019
 
+TOP_WORDS_DEFAULT_LIMIT = 50
+TOP_WORDS_MIN_LIMIT = 1
+TOP_WORDS_MAX_LIMIT = 1000
+
 POS_TAG_MAP: dict[str, str] = {
     "Adjective": "_adj",
     "Adposition": "_adp",

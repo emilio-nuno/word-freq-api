@@ -1,19 +1,19 @@
 import os
 import tempfile
 from unittest.mock import patch
+from fastapi.testclient import TestClient
 import pytest
 import duckdb
 import src.constants as constants
-from typing import Generator
-from contextlib import ExitStack
+from typing import Iterator
 
 @pytest.fixture
-def in_memory_db() -> Generator[str, None, None]:
+def in_memory_db() -> Iterator[str]:
     """
     Create an in-memory DuckDB database with test data.
     """
     with tempfile.TemporaryDirectory() as temp_dir:
-        temp_db_path = os.path.join(temp_dir, "test.duckdb")
+        temp_db_path:str = os.path.join(temp_dir, "test.duckdb")
         
         with duckdb.connect(temp_db_path) as conn:
             
@@ -70,10 +70,18 @@ def in_memory_db() -> Generator[str, None, None]:
         yield temp_db_path
 
 @pytest.fixture
-def override_db_path(in_memory_db: str):
+def override_db_path(in_memory_db: str) -> Iterator[str]:
     """
     Mocks the DB_NAME constant to point to the temporary test database.
     """
 
     with patch.object(constants, "DB_NAME", in_memory_db):
         yield in_memory_db
+
+@pytest.fixture
+def client(override_db_path: str) -> TestClient:
+    """
+    Creates the FastAPI test client
+    """
+    from src.main import app
+    return TestClient(app)
