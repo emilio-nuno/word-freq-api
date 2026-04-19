@@ -1,18 +1,20 @@
-DB_NAME = "data/ngrams.duckdb"
-PREPROCESSED_TABLE_NAME = "gold_ngram_2000_2022"
-UNPROCESSED_TABLE_NAME = "gold_ngrams_sorted"
+from typing import Final
 
-PROCESSED_DATA_START_YEAR = 2000
-PROCESSED_DATA_END_YEAR = 2019
+DB_NAME: Final[str] = "data/ngrams.duckdb"
+PREPROCESSED_TABLE_NAME: Final[str] = "gold_ngram_2000_2022"
+UNPROCESSED_TABLE_NAME: Final[str] = "gold_ngrams_sorted"
 
-RAW_DATA_START_YEAR = 1470
-RAW_DATA_END_YEAR = 2019
+PROCESSED_DATA_START_YEAR: Final[int] = 2000
+PROCESSED_DATA_END_YEAR: Final[int] = 2019
 
-TOP_WORDS_DEFAULT_LIMIT = 50
-TOP_WORDS_MIN_LIMIT = 1
-TOP_WORDS_MAX_LIMIT = 1000
+RAW_DATA_START_YEAR: Final[int] = 1470
+RAW_DATA_END_YEAR: Final[int] = 2019
 
-POS_TAG_MAP: dict[str, str] = {
+TOP_WORDS_DEFAULT_LIMIT: Final[int] = 50
+TOP_WORDS_MIN_LIMIT: Final[int] = 1
+TOP_WORDS_MAX_LIMIT: Final[int] = 1000
+
+POS_TAG_MAP: Final[dict[str, str]] = {
     "Adjective": "_adj",
     "Adposition": "_adp",
     "Verb": "_verb",

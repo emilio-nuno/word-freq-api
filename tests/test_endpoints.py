@@ -63,37 +63,37 @@ def test_end_year_above_maximum_rejects(client: TestClient):
     assert response.status_code == 422
 
 
-def test_word_number_valid_accepts(client: TestClient):
-    """Test endpoint with valid word_number parameter."""
-    response = client.get(f"/top-words?word_number={constants.TOP_WORDS_DEFAULT_LIMIT}")
+def test_word_limit_valid_accepts(client: TestClient):
+    """Test endpoint with valid word_limit parameter."""
+    response = client.get(f"/top-words?word_limit={constants.TOP_WORDS_DEFAULT_LIMIT}")
     assert response.status_code == 200
 
 
-def test_word_number_minimum_boundary_accepts(client: TestClient):
-    """Test word_number=1 returns single result."""
-    response = client.get(f"/top-words?word_number={constants.TOP_WORDS_MIN_LIMIT}")
+def test_word_limit_minimum_boundary_accepts(client: TestClient):
+    """Test word_limit=1 returns single result."""
+    response = client.get(f"/top-words?word_limit={constants.TOP_WORDS_MIN_LIMIT}")
     assert response.status_code == 200
 
 
-def test_word_number_maximum_boundary_accepts(client: TestClient):
-    """Test word_number=TOP_WORDS_MAX_LIMIT is accepted."""
-    response = client.get(f"/top-words?word_number={constants.TOP_WORDS_MAX_LIMIT}")
+def test_word_limit_maximum_boundary_accepts(client: TestClient):
+    """Test word_limit=TOP_WORDS_MAX_LIMIT is accepted."""
+    response = client.get(f"/top-words?word_limit={constants.TOP_WORDS_MAX_LIMIT}")
     assert response.status_code == 200
 
 
-def test_word_number_zero_rejects(client: TestClient):
-    """Test word_number=0 returns 422."""
-    response = client.get("/top-words?word_number=0")
+def test_word_limit_zero_rejects(client: TestClient):
+    """Test word_limit=0 returns 422."""
+    response = client.get("/top-words?word_limit=0")
     assert response.status_code == 422
 
 
-def test_word_number_negative_rejects(client: TestClient):
-    """Test negative word_number returns 422."""
-    response = client.get("/top-words?word_number=-5")
+def test_word_limit_negative_rejects(client: TestClient):
+    """Test negative word_limit returns 422."""
+    response = client.get("/top-words?word_limit=-5")
     assert response.status_code == 422
 
 
-def test_word_number_above_maximum_rejects(client: TestClient):
-    """Test word_number > TOP_WORDS_MAX_LIMIT returns 422."""
-    response = client.get(f"/top-words?word_number={constants.TOP_WORDS_MAX_LIMIT + 1}")
+def test_word_limit_above_maximum_rejects(client: TestClient):
+    """Test word_limit > TOP_WORDS_MAX_LIMIT returns 422."""
+    response = client.get(f"/top-words?word_limit={constants.TOP_WORDS_MAX_LIMIT + 1}")
     assert response.status_code == 422

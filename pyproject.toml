@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
     "pypika>=0.51.1",
+    "sqlglot>=30.4.3",
 ]
 
 [tool.fastapi]
