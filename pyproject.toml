@@ -22,5 +22,7 @@ entrypoint = "src.main:app"
 [dependency-groups]
 dev = [
     "duckdb>=1.5.0",
+    "pyright>=1.1.408",
     "pytest>=9.0.2",
+    "ruff>=0.15.11",
 ]
