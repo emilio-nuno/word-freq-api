@@ -28,6 +28,7 @@ PosTag: TypeAlias = Literal[
 
 app = FastAPI()
 
+
 class CommonParams(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -45,7 +46,6 @@ class CommonParams(BaseModel):
         default=constants.PROCESSED_DATA_START_YEAR,
     )
 
-
     @model_validator(mode="after")
     def check_year_order(self) -> Self:
         if self.start_year > self.end_year:
@@ -54,9 +54,11 @@ class CommonParams(BaseModel):
             )
         return self
 
+
 # TODO: Rename
 class SearchParams(CommonParams):
     pos_tag: PosTag | None = None
+
 
 # FastAPI only accepts one Pydantic model as query parameter
 class TopWordsParams(SearchParams):
@@ -65,6 +67,7 @@ class TopWordsParams(SearchParams):
         le=constants.TOP_WORDS_MAX_LIMIT,
         default=constants.TOP_WORDS_DEFAULT_LIMIT,
     )
+
 
 @dataclass(frozen=True)
 class WordEntry:
@@ -106,11 +109,13 @@ def _build_unprocessed_query(
         .get_sql()
     )
 
+
 def is_within_preprocessed_range(start_year: int, end_year: int) -> bool:
     return (
         start_year >= constants.PROCESSED_DATA_START_YEAR
         and end_year <= constants.PROCESSED_DATA_END_YEAR
     )
+
 
 def build_query(start_year: int, end_year: int, word_number: int) -> str:
 
@@ -134,7 +139,7 @@ async def get_top_words(
     params: Annotated[TopWordsParams, Query()],
 ) -> FrequencyResponse:
 
-    #TODO: Decouple function from Pydantic
+    # TODO: Decouple function from Pydantic
     sql = build_query(params.start_year, params.end_year, params.word_limit)
 
     logger.info("Executing query: %s", sql)

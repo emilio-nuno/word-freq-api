@@ -38,7 +38,7 @@ def test_extra_fields_forbidden():
         CommonParams(
             start_year=constants.RAW_DATA_START_YEAR,
             end_year=constants.RAW_DATA_END_YEAR,
-            extra_param=10, #type: ignore
+            extra_param=10,  # type: ignore
         )
 
 
