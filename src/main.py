@@ -42,7 +42,7 @@ class CommonParams(BaseModel):
     end_year: int = Field(
         ge=constants.RAW_DATA_START_YEAR,
         le=constants.RAW_DATA_END_YEAR,
-        default=constants.PROCESSED_DATA_START_YEAR,
+        default=constants.PROCESSED_DATA_END_YEAR,
     )
 
     @model_validator(mode="after")
@@ -195,6 +195,7 @@ def build_specific_word_query(start_year: int, end_year: int, word: str) -> str:
     return sql
 
 
+# TODO: 2000-2019 works well, but 20005-2006 does not, for example.
 # TODO: Create a list of words to exclude from the word list
 # TODO: Apply pos_tag filter using POS_TAG_MAP
 # TODO: This is not quite async
