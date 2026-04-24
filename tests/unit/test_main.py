@@ -6,7 +6,7 @@ from src.main import (
     build_specific_word_query,
     is_within_preprocessed_range,
 )
-
+from tests.constants import SAMPLE_PROCESSED_WORD, SAMPLE_UNPROCESSED_WORD
 
 # --- is_within_preprocessed_range ---
 
@@ -57,7 +57,9 @@ def test_build_query_uses_unprocessed_table():
 
 def test_build_specific_word_query_uses_preprocessed_table():
     sql = build_specific_word_query(
-        constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR, "the"
+        constants.PROCESSED_DATA_START_YEAR,
+        constants.PROCESSED_DATA_END_YEAR,
+        SAMPLE_PROCESSED_WORD,
     )
     assert constants.PREPROCESSED_TABLE_NAME in sql
     assert constants.UNPROCESSED_TABLE_NAME not in sql
@@ -65,7 +67,9 @@ def test_build_specific_word_query_uses_preprocessed_table():
 
 def test_build_specific_word_query_uses_unprocessed_table():
     sql = build_specific_word_query(
-        constants.RAW_DATA_START_YEAR, constants.RAW_DATA_END_YEAR, "the"
+        constants.RAW_DATA_START_YEAR,
+        constants.RAW_DATA_END_YEAR,
+        SAMPLE_UNPROCESSED_WORD,
     )
     assert constants.UNPROCESSED_TABLE_NAME in sql
     assert constants.PREPROCESSED_TABLE_NAME not in sql
@@ -73,6 +77,8 @@ def test_build_specific_word_query_uses_unprocessed_table():
 
 def test_build_specific_word_query_includes_word():
     sql = build_specific_word_query(
-        constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR, "hello"
+        constants.PROCESSED_DATA_START_YEAR,
+        constants.PROCESSED_DATA_END_YEAR,
+        SAMPLE_PROCESSED_WORD,
     )
-    assert "hello" in sql
+    assert SAMPLE_PROCESSED_WORD in sql
