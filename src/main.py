@@ -227,6 +227,7 @@ async def get_word_freq(params: Annotated[WordFreqParams, Query()]) -> WordEntry
     logger.info("Executing query: %s", sql)
 
     with duckdb.connect(database=constants.DB_NAME, read_only=True) as db:
+        # TODO: Add check to see if query is empty
         row = db.execute(sql).fetchall()[0]
         response = _build_single_response(row)
 
