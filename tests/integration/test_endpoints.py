@@ -112,7 +112,7 @@ def test_word_freq_response_structure_default_params(client: TestClient):
 
     data = response.json()
 
-    assert "that" in data["ngram"]
+    assert SAMPLE_PROCESSED_WORD in data["ngram"]
     assert isinstance(data, dict)
     assert len(data.keys()) == 2
     assert "ngram" in data
