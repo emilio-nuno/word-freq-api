@@ -3,6 +3,8 @@ import tempfile
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 import pytest
+
+# TODO: Remove and use abstractions
 import duckdb
 import src.constants as constants
 from typing import Iterator
