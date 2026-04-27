@@ -1,6 +1,10 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import singledispatch
-from typing import Protocol
+from typing import Generator, Protocol
+
+from duckdb import DuckDBPyConnection
+from google.cloud.bigquery import Client
 
 from src.settings import Settings
 
@@ -21,6 +25,28 @@ class DuckDBData:
     db_path: str = ":memory:"
 
 
+@contextmanager
+def _get_duckdb_connection(executor: DuckDBData) -> Generator[DuckDBPyConnection]:
+    import duckdb
+
+    conn = duckdb.connect(database=executor.db_path, read_only=True)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def _get_bigquery_connection(executor: BigqueryData) -> Generator[Client]:
+    from google.cloud import bigquery
+
+    client = bigquery.Client(project=executor.project_id)
+    try:
+        yield client
+    finally:
+        client.close()
+
+
 # TODO: Used prepare statements for SQL
 # TODO: User input must be lowercased and sanitized
 
@@ -37,9 +63,9 @@ def _(executor: BigqueryData) -> tuple[str, int]:
 
 @execute_single_word_query.register
 def _(executor: DuckDBData) -> tuple[str, int]:
-    import duckdb
 
-    with duckdb.connect(database=executor.db_path, read_only=True) as db:
+    # TODO: Check if fine or if single dispatch is appropriate
+    with _get_duckdb_connection(executor) as db:
         # TODO: Add check to see if query result is empty
         row = db.execute(executor.sql).fetchall()[0]
 
@@ -58,16 +84,14 @@ def _(executor: BigqueryData) -> list[tuple[str, int]]:
 
 @execute_multiple_word_query.register
 def _(executor: DuckDBData) -> list[tuple[str, int]]:
-    import duckdb
 
-    with duckdb.connect(database=executor.db_path, read_only=True) as db:
+    with _get_duckdb_connection(executor) as db:
         # TODO: Add check to see if query result is empty
         row = db.execute(executor.sql).fetchall()
 
     return row
 
 
-# TODO: Where do I document that DuckDB is for dev and Bigquery for prod?
 def build_executor(sql: str, settings: Settings) -> BigqueryData | DuckDBData:
     if settings.is_dev:
         # TODO: How to make test data build in tests possible with this new abstraction?

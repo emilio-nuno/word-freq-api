@@ -31,6 +31,8 @@ PosTag: TypeAlias = Literal[
 ]
 
 # TODO: Replace launch.json with container
+# TODO: Add if TYPE_CHECKING checks to files for types only used for hints
+# TODO: Make private functions that should remain private
 app = FastAPI()
 
 
@@ -217,7 +219,7 @@ async def get_top_words(
 
     logger.info("Executing query: %s", sql)
 
-    execute_multiple_word_query(settings)
+    execute_multiple_word_query(executor)
 
     rows = execute_multiple_word_query(executor)
 
