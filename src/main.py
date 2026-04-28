@@ -3,8 +3,7 @@ import sys
 from dataclasses import asdict, dataclass
 from typing import Annotated, Iterable, Literal, TypeAlias, Self
 
-import duckdb
-from fastapi import FastAPI, Query
+from fastapi import Depends, FastAPI, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pypika import Order
 from pypika import Query as PikaQuery
@@ -12,6 +11,12 @@ from pypika import Table
 from pypika import functions as fn
 
 from src import constants
+from src.db import (
+    build_executor,
+    execute_multiple_word_query,
+    execute_single_word_query,
+)
+from src.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +30,9 @@ PosTag: TypeAlias = Literal[
     "Adjective", "Adposition", "Verb", "Noun", "Adverb", "Conjunction"
 ]
 
+# TODO: Replace launch.json with container
+# TODO: Add if TYPE_CHECKING checks to files for types only used for hints
+# TODO: Make private functions that should remain private
 app = FastAPI()
 
 
@@ -81,10 +89,6 @@ class WordEntry:
 @dataclass(frozen=True)
 class FrequencyResponse:
     words: list[WordEntry]
-
-
-# TODO: Used prepare statements for SQL
-# TODO: User input must be lowercased and sanitized
 
 
 def _build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
@@ -195,6 +199,9 @@ def build_specific_word_query(start_year: int, end_year: int, word: str) -> str:
     return sql
 
 
+SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
 # TODO: 2000-2019 works well, but 20005-2006 does not, for example.
 # TODO: Create a list of words to exclude from the word list
 # TODO: Apply pos_tag filter using POS_TAG_MAP
@@ -202,17 +209,19 @@ def build_specific_word_query(start_year: int, end_year: int, word: str) -> str:
 @app.get("/top-words")
 async def get_top_words(
     params: Annotated[TopWordsParams, Query()],
+    settings: SettingsDep,
 ) -> FrequencyResponse:
 
     # TODO: Decouple function from Pydantic
     sql = build_query(params.start_year, params.end_year, params.word_limit)
 
+    executor = build_executor(sql, settings)
+
     logger.info("Executing query: %s", sql)
 
-    with duckdb.connect(database=constants.DB_NAME, read_only=True) as db:
-        rows = db.execute(sql).fetchall()
+    rows = execute_multiple_word_query(executor)
 
-        response = _build_words_response(rows)
+    response = _build_words_response(rows)
 
     logger.info("Response: %s", asdict(response))
 
@@ -220,16 +229,19 @@ async def get_top_words(
 
 
 @app.get("/word-freq")
-async def get_word_freq(params: Annotated[WordFreqParams, Query()]) -> WordEntry:
-    # TODO: Decouple function from Pydantic
+async def get_word_freq(
+    params: Annotated[WordFreqParams, Query()],
+    settings: SettingsDep,
+) -> WordEntry:
     sql = build_specific_word_query(params.start_year, params.end_year, params.word)
+
+    executor = build_executor(sql, settings)
 
     logger.info("Executing query: %s", sql)
 
-    with duckdb.connect(database=constants.DB_NAME, read_only=True) as db:
-        # TODO: Add check to see if query is empty
-        row = db.execute(sql).fetchall()[0]
-        response = _build_single_response(row)
+    row = execute_single_word_query(executor)
+
+    response = _build_single_response(row)
 
     logger.info("Response: %s", asdict(response))
 

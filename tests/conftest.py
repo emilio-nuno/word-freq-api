@@ -1,20 +1,24 @@
 import os
 import tempfile
-from unittest.mock import patch
 from fastapi.testclient import TestClient
 import pytest
+
+# TODO: Remove and use abstractions
 import duckdb
 import src.constants as constants
-from typing import Iterator
+from typing import Generator
+from src.settings import get_settings, Settings, Envs
+from tests.constants import DUCKDB_DB_PATH
 
 
-@pytest.fixture
-def in_memory_db() -> Iterator[str]:
+@pytest.fixture(scope="module")
+def build_test_db() -> Generator[str]:
     """
     Create an in-memory DuckDB database with test data.
     """
+    # TODO: Check if we could do this with in-memory database
     with tempfile.TemporaryDirectory() as temp_dir:
-        temp_db_path: str = os.path.join(temp_dir, "test.duckdb")
+        temp_db_path: str = os.path.join(temp_dir, DUCKDB_DB_PATH)
 
         with duckdb.connect(temp_db_path) as conn:
             conn.execute(f"""
@@ -91,21 +95,18 @@ def in_memory_db() -> Iterator[str]:
         yield temp_db_path
 
 
-@pytest.fixture
-def override_db_path(in_memory_db: str) -> Iterator[str]:
-    """
-    Mocks the DB_NAME constant to point to the temporary test database.
-    """
-
-    with patch.object(constants, "DB_NAME", in_memory_db):
-        yield in_memory_db
-
-
-@pytest.fixture
-def client(override_db_path: str) -> TestClient:
+@pytest.fixture(scope="module")
+def client(build_test_db: str) -> TestClient:
     """
     Creates the FastAPI test client
     """
     from src.main import app
 
-    return TestClient(app)
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        env=Envs.DEV,
+        duckdb_path=build_test_db,
+    )
+
+    client = TestClient(app)
+
+    return client
