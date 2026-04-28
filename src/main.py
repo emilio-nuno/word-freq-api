@@ -124,7 +124,7 @@ class UnprocessedWordFreqQueryBuilderParams(ProcessedWordFreqQueryBuilderParams)
     date_range: DateRangeParams
 
 
-def _build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
+def build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
     return FrequencyResponse(words=[WordEntry(entry[0], entry[1]) for entry in rows])
 
 
@@ -178,7 +178,7 @@ def _build_unprocessed_word_query(
     )
 
 
-def _build_single_response(row: tuple[str, int]) -> WordEntry:
+def build_single_response(row: tuple[str, int]) -> WordEntry:
 
     return WordEntry(
         row[0],
@@ -302,7 +302,7 @@ async def get_top_words(
 
     rows = execute_multiple_word_query(executor)
 
-    response = _build_words_response(rows)
+    response = build_words_response(rows)
 
     logger.info("Response: %s", asdict(response))
 
@@ -323,7 +323,7 @@ async def get_word_freq(
 
     row = execute_single_word_query(executor)
 
-    response = _build_single_response(row)
+    response = build_single_response(row)
 
     logger.info("Response: %s", asdict(response))
 
