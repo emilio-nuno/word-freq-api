@@ -219,8 +219,6 @@ async def get_top_words(
 
     logger.info("Executing query: %s", sql)
 
-    execute_multiple_word_query(executor)
-
     rows = execute_multiple_word_query(executor)
 
     response = _build_words_response(rows)
