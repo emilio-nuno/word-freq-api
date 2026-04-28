@@ -256,7 +256,7 @@ def _(query_type: UnprocessedWordFreqQueryBuilderParams) -> str:
 def get_top_word_query_type(model: TopWordsParams) -> CommonQueryBuilderParams:
     date_range = DateRangeParams(model.start_year, model.end_year)
 
-    if is_within_preprocessed_range(DateRangeParams(model.start_year, model.end_year)):
+    if is_within_preprocessed_range(date_range):
         return ProcessedTopWordsQueryBuilderParams(
             constants.PREPROCESSED_TABLE_NAME, model.word_limit
         )
@@ -269,7 +269,7 @@ def get_top_word_query_type(model: TopWordsParams) -> CommonQueryBuilderParams:
 def get_word_freq_query_type(model: WordFreqParams) -> CommonQueryBuilderParams:
     date_range = DateRangeParams(model.start_year, model.end_year)
 
-    if is_within_preprocessed_range(DateRangeParams(model.start_year, model.end_year)):
+    if is_within_preprocessed_range(date_range):
         return ProcessedWordFreqQueryBuilderParams(
             constants.PREPROCESSED_TABLE_NAME, model.word
         )
