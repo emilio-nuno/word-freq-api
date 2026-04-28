@@ -91,6 +91,29 @@ class FrequencyResponse:
     words: list[WordEntry]
 
 
+@dataclass(frozen=True)
+class DateRangeParams:
+    start_year: int
+    end_year: int
+
+
+# TODO: Freeze all relevant dataclasses
+@dataclass(frozen=True)
+class CommonQueryBuilderParams:
+    date_range: DateRangeParams
+    table_name: str
+
+
+@dataclass(frozen=True)
+class TopWordsQueryBuilderParams(CommonQueryBuilderParams):
+    word_limit: int
+
+
+@dataclass(frozen=True)
+class WordFreqQueryBuilderParams(CommonQueryBuilderParams):
+    word: str
+
+
 def _build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
     return FrequencyResponse(words=[WordEntry(entry[0], entry[1]) for entry in rows])
 
@@ -162,7 +185,7 @@ def is_within_preprocessed_range(start_year: int, end_year: int) -> bool:
 
 # TODO: Use sqlglot to translate between duckdb and bigquery
 # TODO: Rename
-def build_query(start_year: int, end_year: int, word_limit: int) -> str:
+def build_top_words_query(start_year: int, end_year: int, word_limit: int) -> str:
     """
     Constructs a SQL query based on the parameters passed
     """
@@ -213,7 +236,7 @@ async def get_top_words(
 ) -> FrequencyResponse:
 
     # TODO: Decouple function from Pydantic
-    sql = build_query(params.start_year, params.end_year, params.word_limit)
+    sql = build_top_words_query(params.start_year, params.end_year, params.word_limit)
 
     executor = build_executor(sql, settings)
 

@@ -2,7 +2,7 @@
 
 import src.constants as constants
 from src.main import (
-    build_query,
+    build_top_words_query,
     build_specific_word_query,
     is_within_preprocessed_range,
 )
@@ -33,7 +33,7 @@ def test_start_year_before_preprocessed_range():
 
 
 def test_build_query_uses_preprocessed_table():
-    sql = build_query(
+    sql = build_top_words_query(
         constants.PROCESSED_DATA_START_YEAR,
         constants.PROCESSED_DATA_END_YEAR,
         constants.TOP_WORDS_DEFAULT_LIMIT,
@@ -43,7 +43,7 @@ def test_build_query_uses_preprocessed_table():
 
 
 def test_build_query_uses_unprocessed_table():
-    sql = build_query(
+    sql = build_top_words_query(
         constants.RAW_DATA_START_YEAR,
         constants.RAW_DATA_END_YEAR,
         constants.TOP_WORDS_DEFAULT_LIMIT,
