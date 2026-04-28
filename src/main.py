@@ -256,6 +256,7 @@ def _(query_type: UnprocessedWordFreqQueryBuilderParams) -> str:
 def get_top_word_query_type(model: TopWordsParams) -> CommonQueryBuilderParams:
     date_range = DateRangeParams(model.start_year, model.end_year)
 
+    # TODO: Add single dispatch to this?
     if is_within_preprocessed_range(date_range):
         return ProcessedTopWordsQueryBuilderParams(
             constants.PREPROCESSED_TABLE_NAME, model.word_limit
