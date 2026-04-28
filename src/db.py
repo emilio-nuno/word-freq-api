@@ -9,6 +9,7 @@ from google.cloud.bigquery import Client
 from src.settings import Settings
 
 
+# TODO: We don't actually need protocols
 class DBExecutorData(Protocol):
     sql: str
 
@@ -52,7 +53,7 @@ def _get_bigquery_connection(executor: BigqueryData) -> Generator[Client]:
 
 
 @singledispatch
-def execute_single_word_query(executor) -> tuple[str, int]:
+def execute_single_word_query(executor: object) -> tuple[str, int]:
     raise NotImplementedError(f"No executor for {type(executor)}")
 
 
@@ -73,7 +74,7 @@ def _(executor: DuckDBData) -> tuple[str, int]:
 
 
 @singledispatch
-def execute_multiple_word_query(executor) -> list[tuple[str, int]]:
+def execute_multiple_word_query(executor: object) -> list[tuple[str, int]]:
     raise NotImplementedError(f"No executor for {type(executor)}")
 
 
@@ -92,6 +93,7 @@ def _(executor: DuckDBData) -> list[tuple[str, int]]:
     return row
 
 
+# TODO: Use protocols instead of union types
 def build_executor(sql: str, settings: Settings) -> BigqueryData | DuckDBData:
     if settings.is_dev:
         # TODO: How to make test data build in tests possible with this new abstraction?
