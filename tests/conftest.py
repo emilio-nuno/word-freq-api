@@ -8,16 +8,17 @@ import duckdb
 import src.constants as constants
 from typing import Generator
 from src.settings import get_settings, Settings, Envs
+from tests.constants import DUCKDB_DB_PATH
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def build_test_db() -> Generator[str]:
     """
     Create an in-memory DuckDB database with test data.
     """
     # TODO: Check if we could do this with in-memory database
     with tempfile.TemporaryDirectory() as temp_dir:
-        temp_db_path: str = os.path.join(temp_dir, "test.duckdb")
+        temp_db_path: str = os.path.join(temp_dir, DUCKDB_DB_PATH)
 
         with duckdb.connect(temp_db_path) as conn:
             conn.execute(f"""
@@ -94,7 +95,7 @@ def build_test_db() -> Generator[str]:
         yield temp_db_path
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def client(build_test_db: str) -> TestClient:
     """
     Creates the FastAPI test client
