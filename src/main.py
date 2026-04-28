@@ -1,3 +1,4 @@
+from functools import singledispatch
 import logging
 import sys
 from dataclasses import asdict, dataclass
@@ -91,7 +92,39 @@ class FrequencyResponse:
     words: list[WordEntry]
 
 
-def _build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
+@dataclass(frozen=True)
+class DateRangeParams:
+    start_year: int
+    end_year: int
+
+
+# TODO: Freeze all relevant dataclasses
+@dataclass(frozen=True)
+class CommonQueryBuilderParams:
+    table_name: str
+
+
+@dataclass(frozen=True)
+class ProcessedTopWordsQueryBuilderParams(CommonQueryBuilderParams):
+    word_limit: int
+
+
+@dataclass(frozen=True)
+class UnprocessedTopWordsQueryBuilderParams(ProcessedTopWordsQueryBuilderParams):
+    date_range: DateRangeParams
+
+
+@dataclass(frozen=True)
+class ProcessedWordFreqQueryBuilderParams(CommonQueryBuilderParams):
+    word: str
+
+
+@dataclass(frozen=True)
+class UnprocessedWordFreqQueryBuilderParams(ProcessedWordFreqQueryBuilderParams):
+    date_range: DateRangeParams
+
+
+def build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
     return FrequencyResponse(words=[WordEntry(entry[0], entry[1]) for entry in rows])
 
 
@@ -106,12 +139,12 @@ def _build_preprocessed_query(table: Table, word_number: int) -> str:
 
 
 def _build_unprocessed_query(
-    table: Table, word_number: int, start_year: int, end_year: int
+    table: Table, word_number: int, date_range: DateRangeParams
 ) -> str:
     return (
         PikaQuery.from_(table)
         .select(table.ngram, fn.Sum(table.match_count))
-        .where(table.year.between(start_year, end_year))
+        .where(table.year.between(date_range.start_year, date_range.end_year))
         .groupby(table.ngram)
         .orderby(fn.Sum(table.match_count), order=Order.desc)
         .limit(word_number)
@@ -130,19 +163,22 @@ def _build_preprocessed_word_query(table: Table, word: str) -> str:
 
 
 def _build_unprocessed_word_query(
-    table: Table, word: str, start_year: int, end_year: int
+    table: Table, word: str, date_range: DateRangeParams
 ) -> str:
     return (
         PikaQuery.from_(table)
         .select(table.ngram, fn.Sum(table.match_count))
-        .where(table.year.between(start_year, end_year) and table.ngram == word)
+        .where(
+            table.year.between(date_range.start_year, date_range.end_year) & table.ngram
+            == word
+        )
         .groupby(table.ngram)
         .orderby(fn.Sum(table.match_count), order=Order.desc)
         .get_sql()
     )
 
 
-def _build_single_response(row: tuple[str, int]) -> WordEntry:
+def build_single_response(row: tuple[str, int]) -> WordEntry:
 
     return WordEntry(
         row[0],
@@ -153,50 +189,95 @@ def _build_single_response(row: tuple[str, int]) -> WordEntry:
 # ----------------------------- POSSIBLE ABSTRACTION
 
 
-def is_within_preprocessed_range(start_year: int, end_year: int) -> bool:
+def is_within_preprocessed_range(date_range: DateRangeParams) -> bool:
     return (
-        start_year >= constants.PROCESSED_DATA_START_YEAR
-        and end_year <= constants.PROCESSED_DATA_END_YEAR
+        date_range.start_year >= constants.PROCESSED_DATA_START_YEAR
+        and date_range.end_year <= constants.PROCESSED_DATA_END_YEAR
     )
 
 
 # TODO: Use sqlglot to translate between duckdb and bigquery
 # TODO: Rename
-def build_query(start_year: int, end_year: int, word_limit: int) -> str:
-    """
-    Constructs a SQL query based on the parameters passed
-    """
-    using_preprocessed = is_within_preprocessed_range(start_year, end_year)
 
-    if using_preprocessed:
-        table = Table(constants.PREPROCESSED_TABLE_NAME)
-        sql = _build_preprocessed_query(table, word_limit)
-    else:
-        table = Table(constants.UNPROCESSED_TABLE_NAME)
-        sql = _build_unprocessed_query(table, word_limit, start_year, end_year)
+
+@singledispatch
+def build_query(query_type: object) -> str:
+    raise NotImplementedError(f"No query type for {type(query_type)}")
+
+
+@build_query.register
+def _(query_type: ProcessedTopWordsQueryBuilderParams) -> str:
+    """
+    Constructs a SQL query for a processed top words query
+    """
+
+    table = Table(query_type.table_name)
+    sql = _build_preprocessed_query(table, query_type.word_limit)
 
     return sql
 
 
-def build_specific_word_query(start_year: int, end_year: int, word: str) -> str:
+@build_query.register
+def _(query_type: UnprocessedTopWordsQueryBuilderParams) -> str:
     """
-    Constructs a SQL query based on the parameters passed for a specific word
+    Constructs a SQL query for a processed top words query
     """
-    using_preprocessed = is_within_preprocessed_range(start_year, end_year)
 
-    if using_preprocessed:
-        table = Table(constants.PREPROCESSED_TABLE_NAME)
-        sql = _build_preprocessed_word_query(table, word)
+    table = Table(query_type.table_name)
+    sql = _build_unprocessed_query(table, query_type.word_limit, query_type.date_range)
+
+    return sql
+
+
+@build_query.register
+def _(query_type: ProcessedWordFreqQueryBuilderParams) -> str:
+    """
+    Constructs a SQL query for a processed top words query
+    """
+
+    table = Table(query_type.table_name)
+    sql = _build_preprocessed_word_query(table, query_type.word)
+
+    return sql
+
+
+@build_query.register
+def _(query_type: UnprocessedWordFreqQueryBuilderParams) -> str:
+    """
+    Constructs a SQL query for a processed top words query
+    """
+
+    table = Table(query_type.table_name)
+    sql = _build_unprocessed_word_query(table, query_type.word, query_type.date_range)
+
+    return sql
+
+
+def get_top_word_query_type(model: TopWordsParams) -> CommonQueryBuilderParams:
+    date_range = DateRangeParams(model.start_year, model.end_year)
+
+    # TODO: Add single dispatch to this?
+    if is_within_preprocessed_range(date_range):
+        return ProcessedTopWordsQueryBuilderParams(
+            constants.PREPROCESSED_TABLE_NAME, model.word_limit
+        )
     else:
-        table = Table(constants.UNPROCESSED_TABLE_NAME)
-        sql = _build_unprocessed_word_query(
-            table,
-            word,
-            start_year,
-            end_year,
+        return UnprocessedTopWordsQueryBuilderParams(
+            constants.UNPROCESSED_TABLE_NAME, model.word_limit, date_range
         )
 
-    return sql
+
+def get_word_freq_query_type(model: WordFreqParams) -> CommonQueryBuilderParams:
+    date_range = DateRangeParams(model.start_year, model.end_year)
+
+    if is_within_preprocessed_range(date_range):
+        return ProcessedWordFreqQueryBuilderParams(
+            constants.PREPROCESSED_TABLE_NAME, model.word
+        )
+    else:
+        return UnprocessedWordFreqQueryBuilderParams(
+            constants.UNPROCESSED_TABLE_NAME, model.word, date_range
+        )
 
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -212,8 +293,9 @@ async def get_top_words(
     settings: SettingsDep,
 ) -> FrequencyResponse:
 
-    # TODO: Decouple function from Pydantic
-    sql = build_query(params.start_year, params.end_year, params.word_limit)
+    top_word_class = get_top_word_query_type(params)
+
+    sql = build_query(top_word_class)
 
     executor = build_executor(sql, settings)
 
@@ -221,7 +303,7 @@ async def get_top_words(
 
     rows = execute_multiple_word_query(executor)
 
-    response = _build_words_response(rows)
+    response = build_words_response(rows)
 
     logger.info("Response: %s", asdict(response))
 
@@ -233,7 +315,8 @@ async def get_word_freq(
     params: Annotated[WordFreqParams, Query()],
     settings: SettingsDep,
 ) -> WordEntry:
-    sql = build_specific_word_query(params.start_year, params.end_year, params.word)
+
+    sql = build_query(get_word_freq_query_type(params))
 
     executor = build_executor(sql, settings)
 
@@ -241,7 +324,7 @@ async def get_word_freq(
 
     row = execute_single_word_query(executor)
 
-    response = _build_single_response(row)
+    response = build_single_response(row)
 
     logger.info("Response: %s", asdict(response))
 
