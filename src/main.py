@@ -94,9 +94,21 @@ EndpointParams: TypeAlias = TopWordsParams | WordFreqParams
 
 
 @dataclass(frozen=True)
-class DateRangeParams:
+class DateRange:
     start_year: int
     end_year: int
+
+
+@dataclass(frozen=True)
+class TableContext:
+    pre_table: Table
+    raw_table: Table
+
+
+@dataclass(frozen=True)
+class QueryContext:
+    table_context: TableContext
+    date_range: DateRange
 
 
 def build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
@@ -114,7 +126,7 @@ def _build_preprocessed_query(table: Table, word_number: int) -> str:
 
 
 def _build_unprocessed_query(
-    table: Table, word_number: int, date_range: DateRangeParams
+    table: Table, word_number: int, date_range: DateRange
 ) -> str:
     return (
         PikaQuery.from_(table)
@@ -137,7 +149,7 @@ def _build_preprocessed_word_query(table: Table, word: str) -> str:
 
 
 def _build_unprocessed_word_query(
-    table: Table, word: str, date_range: DateRangeParams
+    table: Table, word: str, date_range: DateRange
 ) -> str:
     return (
         PikaQuery.from_(table)
@@ -160,7 +172,7 @@ def build_single_response(row: tuple[str, int]) -> WordEntry:
     )
 
 
-def _is_within_preprocessed_range(date_range: DateRangeParams) -> bool:
+def _is_within_preprocessed_range(date_range: DateRange) -> bool:
     return (
         date_range.start_year >= constants.PROCESSED_DATA_START_YEAR
         and date_range.end_year <= constants.PROCESSED_DATA_END_YEAR
@@ -185,72 +197,89 @@ class PreprocessedFn(Protocol):
 
 
 class UnprocessedFn(Protocol):
-    def __call__(self, date_range: DateRangeParams) -> str: ...
+    def __call__(self) -> str: ...
 
 
 class ResponseFn(Protocol):
     def __call__(self, rows: list[tuple[str, int]]) -> EndpointSerializer: ...
 
 
-def _run_query(
-    date_range: DateRangeParams,
+class ExecuteFn(Protocol):
+    def __call__(self, sql: str) -> list[tuple[str, int]]: ...
+
+
+def process_request(
+    params_obj: CommonParams,
     settings: Settings,
+    pre_tab_name: str = constants.PREPROCESSED_TABLE_NAME,
+    raw_tab_name: str = constants.UNPROCESSED_TABLE_NAME,
+) -> EndpointSerializer:
+    tab_ctx = TableContext(pre_table=Table(pre_tab_name), raw_table=Table(raw_tab_name))
+    date_range = DateRange(params_obj.start_year, params_obj.end_year)
+    query_ctx = QueryContext(tab_ctx, date_range)
+    return _process_request(params_obj, settings, query_ctx)
+
+
+def _run_query(
+    date_range: DateRange,
     preprocessed_fn: PreprocessedFn,
     unprocessed_fn: UnprocessedFn,
     response_fn: ResponseFn,
+    execute_fn: ExecuteFn,
 ) -> EndpointSerializer:
     sql = (
         preprocessed_fn()
         if _is_within_preprocessed_range(date_range)
-        else unprocessed_fn(date_range)
+        else unprocessed_fn()
     )
     logger.info("Executing query: %s", sql)
-    executor = build_executor(sql, settings)
-    return response_fn(execute(executor))
+    # executor = build_executor(sql, settings)
+    return response_fn(execute_fn(sql))
 
 
 @singledispatch
-def process_request(params: object, settings: Settings) -> EndpointSerializer:
+def _process_request(
+    params: object, settings: Settings, query_ctx: QueryContext
+) -> EndpointSerializer:
     raise NotImplementedError(f"No handler for {type(params)}")
 
 
-@process_request.register
-def _(params: TopWordsParams, settings: Settings) -> FrequencyResponse:
-    dr = DateRangeParams(params.start_year, params.end_year)
-    pre_table = Table(constants.PREPROCESSED_TABLE_NAME)
-    raw_table = Table(constants.UNPROCESSED_TABLE_NAME)
+@_process_request.register
+def _(
+    params: TopWordsParams, settings: Settings, query_ctx: QueryContext
+) -> FrequencyResponse:
+    # TODO: These could be defaults arguments
     return cast(
         FrequencyResponse,
         _run_query(
-            dr,
-            settings,
+            query_ctx.date_range,
             preprocessed_fn=lambda: _build_preprocessed_query(
-                pre_table, params.word_limit
+                query_ctx.table_context.pre_table, params.word_limit
             ),
-            unprocessed_fn=lambda date_range: _build_unprocessed_query(
-                raw_table, params.word_limit, date_range
+            unprocessed_fn=lambda: _build_unprocessed_query(
+                query_ctx.table_context.raw_table,
+                params.word_limit,
+                query_ctx.date_range,
             ),
+            execute_fn=lambda sql: execute(build_executor(sql, settings)),
             response_fn=build_words_response,
         ),
     )
 
 
-@process_request.register
-def _(params: WordFreqParams, settings: Settings) -> WordEntry:
-    dr = DateRangeParams(params.start_year, params.end_year)
-    pre_table = Table(constants.PREPROCESSED_TABLE_NAME)
-    raw_table = Table(constants.UNPROCESSED_TABLE_NAME)
+@_process_request.register
+def _(params: WordFreqParams, settings: Settings, query_ctx: QueryContext) -> WordEntry:
     return cast(
         WordEntry,
         _run_query(
-            dr,
-            settings,
+            query_ctx.date_range,
             preprocessed_fn=lambda: _build_preprocessed_word_query(
-                pre_table, params.word
+                query_ctx.table_context.pre_table, params.word
             ),
-            unprocessed_fn=lambda date_range: _build_unprocessed_word_query(
-                raw_table, params.word, date_range
+            unprocessed_fn=lambda: _build_unprocessed_word_query(
+                query_ctx.table_context.raw_table, params.word, query_ctx.date_range
             ),
+            execute_fn=lambda sql: execute(build_executor(sql, settings)),
             response_fn=lambda rows: build_single_response(rows[0]),
         ),
     )
