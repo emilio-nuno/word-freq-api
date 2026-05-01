@@ -115,31 +115,31 @@ def build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
     return FrequencyResponse(words=[WordEntry(entry[0], entry[1]) for entry in rows])
 
 
-def _build_preprocessed_query(table: Table, word_number: int) -> str:
+def build_preprocessed_query(preprocessed_table: Table, word_number: int) -> str:
     return (
-        PikaQuery.from_(table)
-        .select(table.ngram, table.match_count)
-        .orderby(table.match_count, order=Order.desc)
+        PikaQuery.from_(preprocessed_table)
+        .select(preprocessed_table.ngram, preprocessed_table.match_count)
+        .orderby(preprocessed_table.match_count, order=Order.desc)
         .limit(word_number)
         .get_sql()
     )
 
 
-def _build_unprocessed_query(
-    table: Table, word_number: int, date_range: DateRange
+def build_unprocessed_query(
+    raw_table: Table, word_number: int, date_range: DateRange
 ) -> str:
     return (
-        PikaQuery.from_(table)
-        .select(table.ngram, fn.Sum(table.match_count))
-        .where(table.year.between(date_range.start_year, date_range.end_year))
-        .groupby(table.ngram)
-        .orderby(fn.Sum(table.match_count), order=Order.desc)
+        PikaQuery.from_(raw_table)
+        .select(raw_table.ngram, fn.Sum(raw_table.match_count))
+        .where(raw_table.year.between(date_range.start_year, date_range.end_year))
+        .groupby(raw_table.ngram)
+        .orderby(fn.Sum(raw_table.match_count), order=Order.desc)
         .limit(word_number)
         .get_sql()
     )
 
 
-def _build_preprocessed_word_query(table: Table, word: str) -> str:
+def build_preprocessed_word_query(table: Table, word: str) -> str:
     return (
         PikaQuery.from_(table)
         .select(table.ngram, table.match_count)
@@ -148,9 +148,7 @@ def _build_preprocessed_word_query(table: Table, word: str) -> str:
     )
 
 
-def _build_unprocessed_word_query(
-    table: Table, word: str, date_range: DateRange
-) -> str:
+def build_unprocessed_word_query(table: Table, word: str, date_range: DateRange) -> str:
     return (
         PikaQuery.from_(table)
         .select(table.ngram, fn.Sum(table.match_count))
@@ -172,7 +170,7 @@ def build_single_response(row: tuple[str, int]) -> WordEntry:
     )
 
 
-def _is_within_preprocessed_range(date_range: DateRange) -> bool:
+def is_within_preprocessed_range(date_range: DateRange) -> bool:
     return (
         date_range.start_year >= constants.PROCESSED_DATA_START_YEAR
         and date_range.end_year <= constants.PROCESSED_DATA_END_YEAR
@@ -208,7 +206,7 @@ class ExecuteFn(Protocol):
     def __call__(self, sql: str) -> list[tuple[str, int]]: ...
 
 
-def process_request(
+def prepare_request_processing(
     params_obj: CommonParams,
     settings: Settings,
     pre_tab_name: str = constants.PREPROCESSED_TABLE_NAME,
@@ -217,10 +215,10 @@ def process_request(
     tab_ctx = TableContext(pre_table=Table(pre_tab_name), raw_table=Table(raw_tab_name))
     date_range = DateRange(params_obj.start_year, params_obj.end_year)
     query_ctx = QueryContext(tab_ctx, date_range)
-    return _process_request(params_obj, settings, query_ctx)
+    return process_request(params_obj, settings, query_ctx)
 
 
-def _run_query(
+def run_query(
     date_range: DateRange,
     preprocessed_fn: PreprocessedFn,
     unprocessed_fn: UnprocessedFn,
@@ -229,7 +227,7 @@ def _run_query(
 ) -> EndpointSerializer:
     sql = (
         preprocessed_fn()
-        if _is_within_preprocessed_range(date_range)
+        if is_within_preprocessed_range(date_range)
         else unprocessed_fn()
     )
     logger.info("Executing query: %s", sql)
@@ -238,25 +236,25 @@ def _run_query(
 
 
 @singledispatch
-def _process_request(
+def process_request(
     params: object, settings: Settings, query_ctx: QueryContext
 ) -> EndpointSerializer:
     raise NotImplementedError(f"No handler for {type(params)}")
 
 
-@_process_request.register
+@process_request.register
 def _(
     params: TopWordsParams, settings: Settings, query_ctx: QueryContext
 ) -> FrequencyResponse:
     # TODO: These could be defaults arguments
     return cast(
         FrequencyResponse,
-        _run_query(
+        run_query(
             query_ctx.date_range,
-            preprocessed_fn=lambda: _build_preprocessed_query(
+            preprocessed_fn=lambda: build_preprocessed_query(
                 query_ctx.table_context.pre_table, params.word_limit
             ),
-            unprocessed_fn=lambda: _build_unprocessed_query(
+            unprocessed_fn=lambda: build_unprocessed_query(
                 query_ctx.table_context.raw_table,
                 params.word_limit,
                 query_ctx.date_range,
@@ -267,16 +265,16 @@ def _(
     )
 
 
-@_process_request.register
+@process_request.register
 def _(params: WordFreqParams, settings: Settings, query_ctx: QueryContext) -> WordEntry:
     return cast(
         WordEntry,
-        _run_query(
+        run_query(
             query_ctx.date_range,
-            preprocessed_fn=lambda: _build_preprocessed_word_query(
+            preprocessed_fn=lambda: build_preprocessed_word_query(
                 query_ctx.table_context.pre_table, params.word
             ),
-            unprocessed_fn=lambda: _build_unprocessed_word_query(
+            unprocessed_fn=lambda: build_unprocessed_word_query(
                 query_ctx.table_context.raw_table, params.word, query_ctx.date_range
             ),
             execute_fn=lambda sql: execute(build_executor(sql, settings)),
@@ -290,7 +288,7 @@ async def get_top_words(
     params: Annotated[TopWordsParams, Query()],
     settings: SettingsDep,
 ) -> FrequencyResponse:
-    response = cast(FrequencyResponse, process_request(params, settings))
+    response = cast(FrequencyResponse, prepare_request_processing(params, settings))
     logger.info("Response: %s", asdict(response))
     return response
 
@@ -300,6 +298,6 @@ async def get_word_freq(
     params: Annotated[WordFreqParams, Query()],
     settings: SettingsDep,
 ) -> WordEntry:
-    response = cast(WordEntry, process_request(params, settings))
+    response = cast(WordEntry, prepare_request_processing(params, settings))
     logger.info("Response: %s", asdict(response))
     return response

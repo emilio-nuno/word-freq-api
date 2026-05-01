@@ -5,7 +5,7 @@ import pytest
 
 # TODO: Remove and use abstractions
 import duckdb
-import src.constants as constants
+import src.constants as src_constants
 from typing import Generator
 from src.settings import get_settings, Settings, Envs
 from tests.constants import DUCKDB_DB_PATH
@@ -22,7 +22,7 @@ def build_test_db() -> Generator[str]:
 
         with duckdb.connect(temp_db_path) as conn:
             conn.execute(f"""
-                CREATE TABLE {constants.PREPROCESSED_TABLE_NAME} (
+                CREATE TABLE {src_constants.PREPROCESSED_TABLE_NAME} (
                     ngram VARCHAR,
                     match_count BIGINT
                 )
@@ -42,12 +42,12 @@ def build_test_db() -> Generator[str]:
             ]
 
             conn.executemany(
-                f"INSERT INTO {constants.PREPROCESSED_TABLE_NAME} VALUES (?, ?)",
+                f"INSERT INTO {src_constants.PREPROCESSED_TABLE_NAME} VALUES (?, ?)",
                 preprocessed_data,
             )
 
             conn.execute(f"""
-                CREATE TABLE {constants.UNPROCESSED_TABLE_NAME} (
+                CREATE TABLE {src_constants.UNPROCESSED_TABLE_NAME} (
                     ngram VARCHAR,
                     year INTEGER,
                     match_count BIGINT
@@ -88,7 +88,7 @@ def build_test_db() -> Generator[str]:
             ]
 
             conn.executemany(
-                f"INSERT INTO {constants.UNPROCESSED_TABLE_NAME} VALUES (?, ?, ?)",
+                f"INSERT INTO {src_constants.UNPROCESSED_TABLE_NAME} VALUES (?, ?, ?)",
                 unprocessed_data,
             )
 
