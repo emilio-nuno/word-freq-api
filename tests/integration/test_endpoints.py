@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-import src.constants as constants
+import src.constants as src_constants
 from fastapi import status
 from tests.constants import SAMPLE_PROCESSED_WORD, SAMPLE_UNPROCESSED_WORD
 # --- Top Words Tests ---
@@ -32,20 +32,20 @@ def test_top_words_status_code_default_params(client: TestClient):
 
 def test_top_words_start_year_valid_accepts(client: TestClient):
     """Test endpoint with valid start_year parameter."""
-    response = client.get(f"/top-words?start_year={constants.RAW_DATA_START_YEAR}")
+    response = client.get(f"/top-words?start_year={src_constants.RAW_DATA_START_YEAR}")
     assert response.status_code == status.HTTP_200_OK
 
 
 def test_top_words_end_year_valid_accepts(client: TestClient):
     """Test endpoint with valid end_year parameter."""
-    response = client.get(f"/top-words?end_year={constants.RAW_DATA_END_YEAR}")
+    response = client.get(f"/top-words?end_year={src_constants.RAW_DATA_END_YEAR}")
     assert response.status_code == status.HTTP_200_OK
 
 
 def test_top_words_year_order_inverted_rejects(client: TestClient):
     """Test that start_year > end_year returns 422."""
     response = client.get(
-        f"/top-words?start_year={constants.RAW_DATA_END_YEAR}&end_year={constants.RAW_DATA_START_YEAR}"
+        f"/top-words?start_year={src_constants.RAW_DATA_END_YEAR}&end_year={src_constants.RAW_DATA_START_YEAR}"
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
@@ -53,7 +53,7 @@ def test_top_words_year_order_inverted_rejects(client: TestClient):
 def test_top_words_start_year_below_minimum_rejects(client: TestClient):
     """Test that start_year before valid range returns 422."""
     response = client.get(
-        f"/top-words?start_year={constants.RAW_DATA_START_YEAR - 1}&end_year={constants.RAW_DATA_END_YEAR}"
+        f"/top-words?start_year={src_constants.RAW_DATA_START_YEAR - 1}&end_year={src_constants.RAW_DATA_END_YEAR}"
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
@@ -61,26 +61,28 @@ def test_top_words_start_year_below_minimum_rejects(client: TestClient):
 def test_top_words_end_year_above_maximum_rejects(client: TestClient):
     """Test that end_year after valid range returns 422."""
     response = client.get(
-        f"/top-words?start_year={constants.RAW_DATA_START_YEAR}&end_year={constants.RAW_DATA_END_YEAR + 1}"
+        f"/top-words?start_year={src_constants.RAW_DATA_START_YEAR}&end_year={src_constants.RAW_DATA_END_YEAR + 1}"
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_top_words_word_limit_valid_accepts(client: TestClient):
     """Test endpoint with valid word_limit parameter."""
-    response = client.get(f"/top-words?word_limit={constants.TOP_WORDS_DEFAULT_LIMIT}")
+    response = client.get(
+        f"/top-words?word_limit={src_constants.TOP_WORDS_DEFAULT_LIMIT}"
+    )
     assert response.status_code == status.HTTP_200_OK
 
 
 def test_top_words_word_limit_minimum_boundary_accepts(client: TestClient):
     """Test word_limit=1 returns single result."""
-    response = client.get(f"/top-words?word_limit={constants.TOP_WORDS_MIN_LIMIT}")
+    response = client.get(f"/top-words?word_limit={src_constants.TOP_WORDS_MIN_LIMIT}")
     assert response.status_code == status.HTTP_200_OK
 
 
 def test_top_words_word_limit_maximum_boundary_accepts(client: TestClient):
     """Test word_limit=TOP_WORDS_MAX_LIMIT is accepted."""
-    response = client.get(f"/top-words?word_limit={constants.TOP_WORDS_MAX_LIMIT}")
+    response = client.get(f"/top-words?word_limit={src_constants.TOP_WORDS_MAX_LIMIT}")
     assert response.status_code == status.HTTP_200_OK
 
 
@@ -98,7 +100,9 @@ def test_top_words_word_limit_negative_rejects(client: TestClient):
 
 def test_top_words_word_limit_above_maximum_rejects(client: TestClient):
     """Test word_limit > TOP_WORDS_MAX_LIMIT returns 422."""
-    response = client.get(f"/top-words?word_limit={constants.TOP_WORDS_MAX_LIMIT + 1}")
+    response = client.get(
+        f"/top-words?word_limit={src_constants.TOP_WORDS_MAX_LIMIT + 1}"
+    )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
@@ -136,7 +140,7 @@ def test_word_freq_status_code_default_params(client: TestClient):
 def test_word_freq_start_year_valid_accepts(client: TestClient):
     """Test endpoint with valid start_year parameter."""
     response = client.get(
-        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={constants.RAW_DATA_START_YEAR}"
+        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={src_constants.RAW_DATA_START_YEAR}"
     )
     assert response.status_code == status.HTTP_200_OK
 
@@ -144,7 +148,7 @@ def test_word_freq_start_year_valid_accepts(client: TestClient):
 def test_word_freq_end_year_valid_accepts(client: TestClient):
     """Test endpoint with valid end_year parameter."""
     response = client.get(
-        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&end_year={constants.RAW_DATA_END_YEAR}"
+        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&end_year={src_constants.RAW_DATA_END_YEAR}"
     )
     assert response.status_code == status.HTTP_200_OK
 
@@ -152,7 +156,7 @@ def test_word_freq_end_year_valid_accepts(client: TestClient):
 def test_word_freq_year_order_inverted_rejects(client: TestClient):
     """Test that start_year > end_year returns 422."""
     response = client.get(
-        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={constants.RAW_DATA_END_YEAR}&end_year={constants.RAW_DATA_START_YEAR}"
+        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={src_constants.RAW_DATA_END_YEAR}&end_year={src_constants.RAW_DATA_START_YEAR}"
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
@@ -160,7 +164,7 @@ def test_word_freq_year_order_inverted_rejects(client: TestClient):
 def test_word_freq_start_year_below_minimum_rejects(client: TestClient):
     """Test that start_year before valid range returns 422."""
     response = client.get(
-        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={constants.RAW_DATA_START_YEAR - 1}&end_year={constants.RAW_DATA_END_YEAR}"
+        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={src_constants.RAW_DATA_START_YEAR - 1}&end_year={src_constants.RAW_DATA_END_YEAR}"
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
@@ -168,6 +172,6 @@ def test_word_freq_start_year_below_minimum_rejects(client: TestClient):
 def test_word_freq_end_year_above_maximum_rejects(client: TestClient):
     """Test that end_year after valid range returns 422."""
     response = client.get(
-        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={constants.RAW_DATA_START_YEAR}&end_year={constants.RAW_DATA_END_YEAR + 1}"
+        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={src_constants.RAW_DATA_START_YEAR}&end_year={src_constants.RAW_DATA_END_YEAR + 1}"
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
