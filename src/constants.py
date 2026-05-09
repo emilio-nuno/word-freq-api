@@ -1,7 +1,5 @@
 from typing import Final
 
-# TODO: Prefer to pass constants as default params to functions, instead of from global scope
-
 # Logic code
 PROCESSED_DATA_START_YEAR: Final[int] = 2000
 PROCESSED_DATA_END_YEAR: Final[int] = 2019
@@ -26,3 +24,5 @@ POS_TAG_MAP: Final[dict[str, str]] = {
 DB_NAME: Final[str] = "data/ngrams.duckdb"
 PREPROCESSED_TABLE_NAME: Final[str] = "gold_ngram_2000_2019"
 UNPROCESSED_TABLE_NAME: Final[str] = "gold_ngrams_sorted"
+
+ENGLISH_REGEX: Final[str] = r"^[a-zA-Z]+(_(NOUN|VERB|ADJ|ADV|ADP|CONJ){1})*$"
