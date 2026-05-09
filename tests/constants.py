@@ -1,6 +1,6 @@
 from typing import Final
 
-TEST_DB_PROCESSED_DATA: Final[list[tuple[str, int]]] = [
+SAMPLE_PROCESSED_DATA: Final[list[tuple[str, int]]] = [
     ("the", 1000000),
     ("and", 800000),
     ("of", 600000),
@@ -13,7 +13,7 @@ TEST_DB_PROCESSED_DATA: Final[list[tuple[str, int]]] = [
     ("for", 90000),
 ]
 
-TEST_DB_UNPROCESSED_DATA: Final[list[tuple[str, int, int]]] = [
+SAMPLE_UNPROCESSED_DATA: Final[list[tuple[str, int, int]]] = [
     ("the", 2000, 50000),
     ("the", 2001, 51000),
     ("the", 2010, 52000),
@@ -45,7 +45,7 @@ TEST_DB_UNPROCESSED_DATA: Final[list[tuple[str, int, int]]] = [
     ("word4", 2000, 7000),
     ("word5", 2000, 6000),
 ]
-DUCKDB_DB_PATH: Final[str] = "test.duckdb"
+SAMPLE_DB_PATH: Final[str] = "test.duckdb"
 
 SAMPLE_UNPROCESSED_START_YEAR: Final[int] = 1990
 SAMPLE_UNPROCESSED_END_YEAR: Final[int] = 2015

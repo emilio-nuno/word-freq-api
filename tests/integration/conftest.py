@@ -9,9 +9,9 @@ import src.constants as src_constants
 from typing import Generator
 from src.settings import get_settings, Settings, Envs
 from tests.constants import (
-    DUCKDB_DB_PATH,
-    TEST_DB_PROCESSED_DATA,
-    TEST_DB_UNPROCESSED_DATA,
+    SAMPLE_DB_PATH,
+    SAMPLE_PROCESSED_DATA,
+    SAMPLE_UNPROCESSED_DATA,
 )
 
 
@@ -22,7 +22,7 @@ def build_test_db() -> Generator[str]:
     """
     # TODO: Check if we could do this with in-memory database
     with tempfile.TemporaryDirectory() as temp_dir:
-        temp_db_path: str = os.path.join(temp_dir, DUCKDB_DB_PATH)
+        temp_db_path: str = os.path.join(temp_dir, SAMPLE_DB_PATH)
 
         with duckdb.connect(temp_db_path) as conn:
             conn.execute(f"""
@@ -34,7 +34,7 @@ def build_test_db() -> Generator[str]:
 
             conn.executemany(
                 f"INSERT INTO {src_constants.PREPROCESSED_TABLE_NAME} VALUES (?, ?)",
-                TEST_DB_PROCESSED_DATA,
+                SAMPLE_PROCESSED_DATA,
             )
 
             conn.execute(f"""
@@ -47,7 +47,7 @@ def build_test_db() -> Generator[str]:
 
             conn.executemany(
                 f"INSERT INTO {src_constants.UNPROCESSED_TABLE_NAME} VALUES (?, ?, ?)",
-                TEST_DB_UNPROCESSED_DATA,
+                SAMPLE_UNPROCESSED_DATA,
             )
 
         yield temp_db_path
