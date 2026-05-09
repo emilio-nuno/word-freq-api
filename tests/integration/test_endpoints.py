@@ -161,12 +161,12 @@ def test_word_freq_response_structure_processed_params(client: TestClient):
     response = client.get(f"/word-freq?word={SAMPLE_PROCESSED_WORD}")
     assert response.status_code == status.HTTP_200_OK
 
-    response = response.json()
+    response_data = response.json()
 
-    assert response == SAMPLE_PROCESSED_WORD_RESPONSE
+    assert response_data == SAMPLE_PROCESSED_WORD_RESPONSE
 
-    assert isinstance(response["ngram"], str)
-    assert isinstance(response["count"], int)
+    assert isinstance(response_data["ngram"], str)
+    assert isinstance(response_data["count"], int)
 
 
 def test_word_freq_response_structure_unprocessed_params(client: TestClient):
@@ -176,12 +176,12 @@ def test_word_freq_response_structure_unprocessed_params(client: TestClient):
     )
     assert response.status_code == status.HTTP_200_OK
 
-    response = response.json()
+    response_data = response.json()
 
-    assert response == SAMPLE_UNPROCESSED_WORD_RESPONSE
+    assert response_data == SAMPLE_UNPROCESSED_WORD_RESPONSE
 
-    assert isinstance(response["ngram"], str)
-    assert isinstance(response["count"], int)
+    assert isinstance(response_data["ngram"], str)
+    assert isinstance(response_data["count"], int)
 
 
 def test_word_freq_word_required(client: TestClient):
@@ -283,9 +283,7 @@ def test_words_freq_words_required(client: TestClient):
 
 def test_words_freq_start_year_valid_accepts(client: TestClient):
     """Test endpoint with valid start_year parameter."""
-    words_url = "&".join(
-        ["words=" + word for word in SAMPLE_UNPROCESSED_WORDS_QUERY_RESPONSE]
-    )
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
 
     response = client.get(
         f"/words-freq?{words_url}&start_year={src_constants.RAW_DATA_START_YEAR}"
@@ -295,9 +293,7 @@ def test_words_freq_start_year_valid_accepts(client: TestClient):
 
 def test_words_freq_end_year_valid_accepts(client: TestClient):
     """Test endpoint with valid end_year parameter."""
-    words_url = "&".join(
-        ["words=" + word for word in SAMPLE_UNPROCESSED_WORDS_QUERY_RESPONSE]
-    )
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
 
     response = client.get(
         f"/words-freq?{words_url}&end_year={src_constants.RAW_DATA_END_YEAR}"
@@ -307,9 +303,7 @@ def test_words_freq_end_year_valid_accepts(client: TestClient):
 
 def test_words_freq_year_order_inverted_rejects(client: TestClient):
     """Test that start_year > end_year returns 422."""
-    words_url = "&".join(
-        ["words=" + word for word in SAMPLE_UNPROCESSED_WORDS_QUERY_RESPONSE]
-    )
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
 
     response = client.get(
         f"/words-freq?{words_url}&start_year={src_constants.RAW_DATA_END_YEAR}&end_year={src_constants.RAW_DATA_START_YEAR}"
@@ -319,9 +313,7 @@ def test_words_freq_year_order_inverted_rejects(client: TestClient):
 
 def test_words_freq_start_year_below_minimum_rejects(client: TestClient):
     """Test that start_year before valid range returns 422."""
-    words_url = "&".join(
-        ["words=" + word for word in SAMPLE_UNPROCESSED_WORDS_QUERY_RESPONSE]
-    )
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
 
     response = client.get(
         f"/words-freq?{words_url}&start_year={src_constants.RAW_DATA_START_YEAR - 1}&end_year={src_constants.RAW_DATA_END_YEAR}"
@@ -331,9 +323,7 @@ def test_words_freq_start_year_below_minimum_rejects(client: TestClient):
 
 def test_words_freq_end_year_above_maximum_rejects(client: TestClient):
     """Test that end_year after valid range returns 422."""
-    words_url = "&".join(
-        ["words=" + word for word in SAMPLE_UNPROCESSED_WORDS_QUERY_RESPONSE]
-    )
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
 
     response = client.get(
         f"/words-freq?{words_url}&start_year={src_constants.RAW_DATA_START_YEAR}&end_year={src_constants.RAW_DATA_END_YEAR + 1}"
