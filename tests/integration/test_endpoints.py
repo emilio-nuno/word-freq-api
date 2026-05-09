@@ -1,27 +1,74 @@
 from fastapi.testclient import TestClient
 import src.constants as src_constants
 from fastapi import status
-from tests.constants import SAMPLE_PROCESSED_WORD, SAMPLE_UNPROCESSED_WORD
+from tests.constants import (
+    SAMPLE_PROCESSED_TOPWORDS_DEFAULT_RESPONSE,
+    SAMPLE_PROCESSED_TOPWORDS_QUERY_RESPONSE,
+    SAMPLE_PROCESSED_WORD,
+    SAMPLE_PROCESSED_WORD_RESPONSE,
+    SAMPLE_PROCESSED_WORDS_QUERY_RESPONSE,
+    SAMPLE_TOPWORDS_WORD_LIMIT,
+    SAMPLE_UNPROCESSED_END_YEAR,
+    SAMPLE_UNPROCESSED_TOPWORDS_QUERY_RESPONSE,
+    SAMPLE_UNPROCESSED_WORDS_QUERY_RESPONSE,
+    SAMPLE_UNPROCESSED_START_YEAR,
+    SAMPLE_UNPROCESSED_WORD,
+    SAMPLE_PROCESSED_WORDS,
+    SAMPLE_UNPROCESSED_WORD_RESPONSE,
+    SAMPLE_UNPROCESSED_WORDS,
+)
 # --- Top Words Tests ---
+# TODO: Add processed and unprocessed tests separately
 
 
 def test_top_words_response_structure_default_params(client: TestClient):
     """Test response has correct structure."""
+
     response = client.get("/top-words")
     assert response.status_code == status.HTTP_200_OK
 
-    data = response.json()
+    response_data = response.json()
 
-    assert "words" in data
-    assert isinstance(data["words"], list)
-    assert len(data["words"]) > 0
+    assert response_data == SAMPLE_PROCESSED_TOPWORDS_DEFAULT_RESPONSE
 
-    for word in data["words"]:
-        assert isinstance(word, dict)
-        assert "ngram" in word
-        assert "count" in word
-        assert isinstance(word["ngram"], str)
-        assert isinstance(word["count"], int)
+    assert all(
+        isinstance(result["ngram"], str) and isinstance(result["count"], int)
+        for result in response_data["words"]
+    )
+
+
+def test_top_words_response_structure_processed_params(client: TestClient):
+    """Test response has correct structure."""
+
+    response = client.get(f"/top-words?word_limit={SAMPLE_TOPWORDS_WORD_LIMIT}")
+    assert response.status_code == status.HTTP_200_OK
+
+    response_data = response.json()
+
+    assert response_data == SAMPLE_PROCESSED_TOPWORDS_QUERY_RESPONSE
+
+    assert all(
+        isinstance(result["ngram"], str) and isinstance(result["count"], int)
+        for result in response_data["words"]
+    )
+
+
+def test_top_words_response_structure_unprocessed_params(client: TestClient):
+    """Test response has correct structure."""
+
+    response = client.get(
+        f"/top-words?word_limit={SAMPLE_TOPWORDS_WORD_LIMIT}&start_year={SAMPLE_UNPROCESSED_START_YEAR}&end_year={SAMPLE_UNPROCESSED_END_YEAR}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+    response_data = response.json()
+
+    assert response_data == SAMPLE_UNPROCESSED_TOPWORDS_QUERY_RESPONSE
+
+    assert all(
+        isinstance(result["ngram"], str) and isinstance(result["count"], int)
+        for result in response_data["words"]
+    )
 
 
 def test_top_words_status_code_default_params(client: TestClient):
@@ -109,20 +156,32 @@ def test_top_words_word_limit_above_maximum_rejects(client: TestClient):
 # --- Word Freq Tests ---
 
 
-def test_word_freq_response_structure_default_params(client: TestClient):
+def test_word_freq_response_structure_processed_params(client: TestClient):
     """Test response has correct structure."""
     response = client.get(f"/word-freq?word={SAMPLE_PROCESSED_WORD}")
     assert response.status_code == status.HTTP_200_OK
 
-    data = response.json()
+    response_data = response.json()
 
-    assert SAMPLE_PROCESSED_WORD in data["ngram"]
-    assert isinstance(data, dict)
-    assert len(data.keys()) == 2
-    assert "ngram" in data
-    assert "count" in data
-    assert isinstance(data["ngram"], str)
-    assert isinstance(data["count"], int)
+    assert response_data == SAMPLE_PROCESSED_WORD_RESPONSE
+
+    assert isinstance(response_data["ngram"], str)
+    assert isinstance(response_data["count"], int)
+
+
+def test_word_freq_response_structure_unprocessed_params(client: TestClient):
+    """Test response has correct structure with unprocessed input."""
+    response = client.get(
+        f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={SAMPLE_UNPROCESSED_START_YEAR}&end_year={SAMPLE_UNPROCESSED_END_YEAR}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+    response_data = response.json()
+
+    assert response_data == SAMPLE_UNPROCESSED_WORD_RESPONSE
+
+    assert isinstance(response_data["ngram"], str)
+    assert isinstance(response_data["count"], int)
 
 
 def test_word_freq_word_required(client: TestClient):
@@ -173,5 +232,100 @@ def test_word_freq_end_year_above_maximum_rejects(client: TestClient):
     """Test that end_year after valid range returns 422."""
     response = client.get(
         f"/word-freq?word={SAMPLE_UNPROCESSED_WORD}&start_year={src_constants.RAW_DATA_START_YEAR}&end_year={src_constants.RAW_DATA_END_YEAR + 1}"
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+# --- Words Freq Tests ---
+
+
+def test_words_freq_response_structure_default_params(client: TestClient):
+    """Test response has correct structure."""
+    words_url = "&".join(["words=" + word for word in SAMPLE_PROCESSED_WORDS])
+    response = client.get(f"/words-freq?{words_url}")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    response_data = response.json()
+
+    assert response_data == SAMPLE_PROCESSED_WORDS_QUERY_RESPONSE
+
+    assert all(
+        isinstance(result["ngram"], str) and isinstance(result["count"], int)
+        for result in response_data["words"]
+    )
+
+
+def test_words_freq_response_structure_unprocessed_params(client: TestClient):
+    """Test response has correct structure."""
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
+    response = client.get(
+        f"/words-freq?{words_url}&start_year={SAMPLE_UNPROCESSED_START_YEAR}&end_year={SAMPLE_UNPROCESSED_END_YEAR}"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    response_data = response.json()
+
+    assert response_data == SAMPLE_UNPROCESSED_WORDS_QUERY_RESPONSE
+
+    assert all(
+        isinstance(result["ngram"], str) and isinstance(result["count"], int)
+        for result in response_data["words"]
+    )
+
+
+def test_words_freq_words_required(client: TestClient):
+    """Test words parameter is required."""
+    response = client.get("/words-freq")
+    assert response.status_code != status.HTTP_200_OK
+
+
+def test_words_freq_start_year_valid_accepts(client: TestClient):
+    """Test endpoint with valid start_year parameter."""
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
+
+    response = client.get(
+        f"/words-freq?{words_url}&start_year={src_constants.RAW_DATA_START_YEAR}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+
+def test_words_freq_end_year_valid_accepts(client: TestClient):
+    """Test endpoint with valid end_year parameter."""
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
+
+    response = client.get(
+        f"/words-freq?{words_url}&end_year={src_constants.RAW_DATA_END_YEAR}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+
+def test_words_freq_year_order_inverted_rejects(client: TestClient):
+    """Test that start_year > end_year returns 422."""
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
+
+    response = client.get(
+        f"/words-freq?{words_url}&start_year={src_constants.RAW_DATA_END_YEAR}&end_year={src_constants.RAW_DATA_START_YEAR}"
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+def test_words_freq_start_year_below_minimum_rejects(client: TestClient):
+    """Test that start_year before valid range returns 422."""
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
+
+    response = client.get(
+        f"/words-freq?{words_url}&start_year={src_constants.RAW_DATA_START_YEAR - 1}&end_year={src_constants.RAW_DATA_END_YEAR}"
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+def test_words_freq_end_year_above_maximum_rejects(client: TestClient):
+    """Test that end_year after valid range returns 422."""
+    words_url = "&".join(["words=" + word for word in SAMPLE_UNPROCESSED_WORDS])
+
+    response = client.get(
+        f"/words-freq?{words_url}&start_year={src_constants.RAW_DATA_START_YEAR}&end_year={src_constants.RAW_DATA_END_YEAR + 1}"
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT

@@ -1,8 +1,9 @@
+from enum import Enum
 from functools import singledispatch
 import logging
 import sys
 from dataclasses import asdict, dataclass
-from typing import Annotated, Iterable, Literal, Protocol, TypeAlias, Self, cast
+from typing import Annotated, Iterable, Protocol, TypeAlias, Self, cast
 
 from fastapi import Depends, FastAPI, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -23,9 +24,14 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
-PosTag: TypeAlias = Literal[
-    "Adjective", "Adposition", "Verb", "Noun", "Adverb", "Conjunction"
-]
+
+class PosTag(str, Enum):
+    ADJECTIVE = "Adjective"
+    ADPOSITION = "Adposition"
+    VERB = "Verb"
+    NOUN = "Noun"
+    ADVERB = "Adverb"
+    CONJUNCTION = "Conjunction"
 
 
 # TODO: Replace launch.json with container
@@ -60,12 +66,13 @@ class CommonParams(BaseModel):
         return self
 
 
-# TODO: Rename
+# TODO: May not be needed
 class SearchParams(CommonParams):
     pos_tag: PosTag | None = None
 
 
 # FastAPI only accepts one Pydantic model as query parameter
+# TODO: Remove
 class TopWordsParams(SearchParams):
     word_limit: int = Field(
         ge=constants.TOP_WORDS_MIN_LIMIT,
@@ -76,6 +83,23 @@ class TopWordsParams(SearchParams):
 
 class WordFreqParams(SearchParams):
     word: str
+
+
+class WordInfo(BaseModel):
+    name: str
+    tag: PosTag
+
+
+class WordsFreqParams(CommonParams):
+    words: Annotated[
+        list[
+            Annotated[
+                str,
+                Field(pattern=constants.ENGLISH_REGEX, examples=["word", "word_NOUN"]),
+            ]
+        ],
+        Field(min_length=1),
+    ]
 
 
 @dataclass(frozen=True)
@@ -90,7 +114,8 @@ class FrequencyResponse:
 
 
 EndpointSerializer: TypeAlias = WordEntry | FrequencyResponse
-EndpointParams: TypeAlias = TopWordsParams | WordFreqParams
+# TODO: Could probably just reference CommonParams ancestor
+EndpointParams: TypeAlias = TopWordsParams | WordFreqParams | WordsFreqParams
 
 
 @dataclass(frozen=True)
@@ -139,25 +164,55 @@ def build_unprocessed_query(
     )
 
 
-def build_preprocessed_word_query(table: Table, word: str) -> str:
+# TODO: Rename table parameter for consistency
+def build_preprocessed_word_query(preprocessed_table: Table, word: str) -> str:
     return (
-        PikaQuery.from_(table)
-        .select(table.ngram, table.match_count)
-        .where(table.ngram == word)
+        PikaQuery.from_(preprocessed_table)
+        .select(preprocessed_table.ngram, preprocessed_table.match_count)
+        .where(preprocessed_table.ngram == word)
         .get_sql()
     )
 
 
-def build_unprocessed_word_query(table: Table, word: str, date_range: DateRange) -> str:
+def build_unprocessed_word_query(
+    raw_table: Table, word: str, date_range: DateRange
+) -> str:
     return (
-        PikaQuery.from_(table)
-        .select(table.ngram, fn.Sum(table.match_count))
+        PikaQuery.from_(raw_table)
+        .select(raw_table.ngram, fn.Sum(raw_table.match_count))
         .where(
-            table.year.between(date_range.start_year, date_range.end_year) & table.ngram
+            raw_table.year.between(date_range.start_year, date_range.end_year)
+            & raw_table.ngram
             == word
         )
-        .groupby(table.ngram)
-        .orderby(fn.Sum(table.match_count), order=Order.desc)
+        .groupby(raw_table.ngram)
+        .orderby(fn.Sum(raw_table.match_count), order=Order.desc)
+        .get_sql()
+    )
+
+
+def build_preprocessed_words_query(preprocessed_table: Table, words: list[str]) -> str:
+    return (
+        PikaQuery.from_(preprocessed_table)
+        .select(preprocessed_table.ngram, preprocessed_table.match_count)
+        .where(preprocessed_table.ngram.isin(words))
+        .orderby(preprocessed_table.match_count, order=Order.desc)
+        .get_sql()
+    )
+
+
+def build_unprocessed_words_query(
+    raw_table: Table, words: list[str], date_range: DateRange
+) -> str:
+    return (
+        PikaQuery.from_(raw_table)
+        .select(raw_table.ngram, fn.Sum(raw_table.match_count))
+        .where(
+            raw_table.ngram.isin(words)
+            & raw_table.year.between(date_range.start_year, date_range.end_year)
+        )
+        .groupby(raw_table.ngram)
+        .orderby(fn.Sum(raw_table.match_count), order=Order.desc)
         .get_sql()
     )
 
@@ -185,7 +240,6 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 # TODO: 2000-2019 works well, but 20005-2006 does not, for example.
 # TODO: Create a list of words to exclude from the word list
-# TODO: Apply pos_tag filter using POS_TAG_MAP
 # TODO: This is not quite async
 # TODO: Create custom typealias for list[tuple[str, int]], perhaps WordEntry could work? But that is only a serializer
 
@@ -246,7 +300,6 @@ def process_request(
 def _(
     params: TopWordsParams, settings: Settings, query_ctx: QueryContext
 ) -> FrequencyResponse:
-    # TODO: These could be defaults arguments
     return cast(
         FrequencyResponse,
         run_query(
@@ -283,6 +336,28 @@ def _(params: WordFreqParams, settings: Settings, query_ctx: QueryContext) -> Wo
     )
 
 
+@process_request.register
+def _(
+    params: WordsFreqParams, settings: Settings, query_ctx: QueryContext
+) -> FrequencyResponse:
+    words_list = [word for word in params.words]
+
+    return cast(
+        FrequencyResponse,
+        run_query(
+            query_ctx.date_range,
+            preprocessed_fn=lambda: build_preprocessed_words_query(
+                query_ctx.table_context.pre_table, words_list
+            ),
+            unprocessed_fn=lambda: build_unprocessed_words_query(
+                query_ctx.table_context.raw_table, words_list, query_ctx.date_range
+            ),
+            execute_fn=lambda sql: execute(build_executor(sql, settings)),
+            response_fn=lambda rows: build_words_response(rows),
+        ),
+    )
+
+
 @app.get("/top-words")
 async def get_top_words(
     params: Annotated[TopWordsParams, Query()],
@@ -300,4 +375,15 @@ async def get_word_freq(
 ) -> WordEntry:
     response = cast(WordEntry, prepare_request_processing(params, settings))
     logger.info("Response: %s", asdict(response))
+    return response
+
+
+@app.get("/words-freq")
+async def get_words_freq(
+    params: Annotated[WordsFreqParams, Query()], settings: SettingsDep
+) -> FrequencyResponse:
+
+    response = cast(FrequencyResponse, prepare_request_processing(params, settings))
+    logger.info("Response: %s", asdict(response))
+
     return response
