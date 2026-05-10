@@ -3,12 +3,11 @@
 from pypika import Table
 
 import src.constants as src_constants
-import tests.constants as test_constants
+
+import tests.unit.constants as tests_unit
 
 from src.main import (
     DateRange,
-    FrequencyResponse,
-    WordEntry,
     is_within_preprocessed_range,
     build_preprocessed_query,
     build_unprocessed_query,
@@ -16,8 +15,9 @@ from src.main import (
     build_unprocessed_word_query,
     build_single_response,
     build_words_response,
+    build_preprocessed_words_query,
+    build_unprocessed_words_query,
 )
-
 
 # --- is_within_preprocessed_range ---
 
@@ -37,10 +37,20 @@ def test_outside_preprocessed_range():
     )
 
 
-def test_start_year_before_preprocessed_range():
+def test_start_year_before_preprocessed_boundary():
     assert not is_within_preprocessed_range(
         DateRange(
-            src_constants.RAW_DATA_START_YEAR, src_constants.PROCESSED_DATA_END_YEAR
+            src_constants.PROCESSED_DATA_START_YEAR - 1,
+            src_constants.PROCESSED_DATA_END_YEAR,
+        )
+    )
+
+
+def test_end_year_after_preprocessed_boundary():
+    assert not is_within_preprocessed_range(
+        DateRange(
+            src_constants.PROCESSED_DATA_START_YEAR,
+            src_constants.PROCESSED_DATA_END_YEAR + 1,
         )
     )
 
@@ -48,102 +58,92 @@ def test_start_year_before_preprocessed_range():
 # --- build_query (top words) ---
 
 
-# TODO: Put in integration tests
-def test_build_top_words_query_uses_preprocessed_table():
+def test_build_top_words_query_preprocessed_sql():
+
     table = Table(src_constants.PREPROCESSED_TABLE_NAME)
 
-    sql = build_preprocessed_query(table, test_constants.SAMPLE_TOPWORDS_WORD_LIMIT)
+    sql = build_preprocessed_query(table, tests_unit.SAMPLE_TOPWORDS_WORD_LIMIT)
 
-    assert src_constants.PREPROCESSED_TABLE_NAME in sql
-    assert src_constants.UNPROCESSED_TABLE_NAME not in sql
+    assert sql == tests_unit.EXPECTED_PREPROCESSED_TOPWORDS_QUERY_SQL
 
 
-def test_build_top_words_query_uses_unprocessed_table():
+def test_build_top_words_query_unprocessed_sql():
     table = Table(src_constants.UNPROCESSED_TABLE_NAME)
     date_range = DateRange(
-        src_constants.RAW_DATA_START_YEAR, src_constants.RAW_DATA_END_YEAR
+        tests_unit.SAMPLE_UNPROCESSED_START_YEAR, tests_unit.SAMPLE_UNPROCESSED_END_YEAR
     )
 
     sql = build_unprocessed_query(
-        table, test_constants.SAMPLE_TOPWORDS_WORD_LIMIT, date_range
+        table, tests_unit.SAMPLE_TOPWORDS_WORD_LIMIT, date_range
     )
 
-    assert src_constants.UNPROCESSED_TABLE_NAME in sql
-    assert src_constants.PREPROCESSED_TABLE_NAME not in sql
-
-    assert str(test_constants.SAMPLE_TOPWORDS_WORD_LIMIT) in sql
-
-    assert str(date_range.start_year) in sql
-    assert str(date_range.end_year) in sql
+    assert sql == tests_unit.EXPECTED_UNPROCESSED_TOPWORDS_QUERY_SQL
 
 
 # --- build_query (word freq) ---
 
 
-def test_build_word_freq_query_uses_preprocessed_table():
+def test_build_word_query_preprocessed_sql():
     table = Table(src_constants.PREPROCESSED_TABLE_NAME)
 
-    sql = build_preprocessed_word_query(table, test_constants.SAMPLE_PROCESSED_WORD)
+    sql = build_preprocessed_word_query(table, tests_unit.SAMPLE_PROCESSED_WORD)
 
-    assert src_constants.PREPROCESSED_TABLE_NAME in sql
-    assert src_constants.UNPROCESSED_TABLE_NAME not in sql
-
-    assert test_constants.SAMPLE_PROCESSED_WORD in sql
-
-    assert str(src_constants.PROCESSED_DATA_START_YEAR) in sql
-    assert str(src_constants.PROCESSED_DATA_END_YEAR) in sql
+    assert sql == tests_unit.EXPECTED_PREPROCESSED_WORD_QUERY_SQL
 
 
-# TODO: Perhaps could test with actual SQL sample
-def test_build_word_freq_query_uses_unprocessed_table():
+def test_build_word_query_unprocessed_sql():
     table = Table(src_constants.UNPROCESSED_TABLE_NAME)
 
     date_range = DateRange(
-        src_constants.RAW_DATA_START_YEAR, src_constants.RAW_DATA_END_YEAR
+        tests_unit.SAMPLE_UNPROCESSED_START_YEAR, tests_unit.SAMPLE_UNPROCESSED_END_YEAR
     )
 
     sql = build_unprocessed_word_query(
-        table, test_constants.SAMPLE_UNPROCESSED_WORD, date_range
+        table, tests_unit.SAMPLE_UNPROCESSED_WORD, date_range
     )
 
-    assert src_constants.UNPROCESSED_TABLE_NAME in sql
-    assert src_constants.PREPROCESSED_TABLE_NAME not in sql
+    assert sql == tests_unit.EXPECTED_UNPROCESSED_WORD_QUERY_SQL
 
-    assert str(test_constants.SAMPLE_UNPROCESSED_WORD) in sql
 
-    assert str(date_range.start_year) in sql
-    assert str(date_range.end_year) in sql
+# --- build_query (words-freq) ---
+
+
+def test_build_words_query_preprocessed_sql():
+    table = Table(src_constants.PREPROCESSED_TABLE_NAME)
+
+    sql = build_preprocessed_words_query(table, tests_unit.SAMPLE_PROCESSED_WORDS)
+
+    assert sql == tests_unit.EXPECTED_PREPROCESSED_WORDS_QUERY_SQL
+
+
+def test_build_words_query_unprocessed_sql():
+    table = Table(src_constants.UNPROCESSED_TABLE_NAME)
+
+    date_range = DateRange(
+        tests_unit.SAMPLE_UNPROCESSED_START_YEAR, tests_unit.SAMPLE_UNPROCESSED_END_YEAR
+    )
+
+    sql = build_unprocessed_words_query(
+        table, tests_unit.SAMPLE_UNPROCESSED_WORDS, date_range
+    )
+
+    assert sql == tests_unit.EXPECTED_UNPROCESSED_WORDS_QUERY_SQL
 
 
 def test_build_single_word_response():
-    sample_input = (
-        test_constants.SAMPLE_PROCESSED_WORD,
-        test_constants.SAMPLE_PROCESSED_WORD_COUNT,
-    )
 
-    assert build_single_response(sample_input) == WordEntry(
-        sample_input[0], sample_input[1]
+    assert (
+        build_single_response(tests_unit.SAMPLE_SINGLE_WORD_RESPONSE_INPUT)
+        == tests_unit.EXPECTED_SINGLE_WORD_RESPONSE_OUTPUT
     )
 
 
 def test_build_top_words_response():
-    inputs = [
-        (
-            test_constants.SAMPLE_PROCESSED_WORD + "1",
-            test_constants.SAMPLE_PROCESSED_WORD_COUNT + 1,
-        ),
-        (
-            test_constants.SAMPLE_PROCESSED_WORD + "2",
-            test_constants.SAMPLE_PROCESSED_WORD_COUNT + 2,
-        ),
-        (
-            test_constants.SAMPLE_PROCESSED_WORD + "3",
-            test_constants.SAMPLE_PROCESSED_WORD_COUNT + 3,
-        ),
-    ]
-    processed_inputs: FrequencyResponse = build_words_response(inputs)
 
-    assert len(processed_inputs.words) == len(inputs)
+    assert (
+        build_words_response(tests_unit.SAMPLE_MULTIPLE_RESPONSE_INPUT)
+        == tests_unit.EXPECTED_MULTIPLE_WORD_RESPONSE_OUTPUT
+    )
 
-    for i, word_entry in enumerate(processed_inputs.words):
-        assert word_entry == WordEntry(inputs[i][0], inputs[i][1])
+
+# TODO Add test for the functions from the new endpoint

@@ -50,8 +50,8 @@ SAMPLE_DB_PATH: Final[str] = "test.duckdb"
 SAMPLE_UNPROCESSED_START_YEAR: Final[int] = 1990
 SAMPLE_UNPROCESSED_END_YEAR: Final[int] = 2015
 
-SAMPLE_TOPWORDS_WORD_LIMIT: Final[int] = 5
 # Default is 50, but test dataset is 10 rows, so we return entire dataset
+SAMPLE_TOPWORDS_WORD_LIMIT: Final[int] = 5
 SAMPLE_PROCESSED_TOPWORDS_DEFAULT_RESPONSE: Final[
     dict[str, list[dict[str, str | int]]]
 ] = {

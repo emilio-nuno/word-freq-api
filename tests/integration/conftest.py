@@ -8,7 +8,7 @@ import duckdb
 import src.constants as src_constants
 from typing import Generator
 from src.settings import get_settings, Settings, Envs
-from tests.constants import (
+from tests.integration.constants import (
     SAMPLE_DB_PATH,
     SAMPLE_PROCESSED_DATA,
     SAMPLE_UNPROCESSED_DATA,
