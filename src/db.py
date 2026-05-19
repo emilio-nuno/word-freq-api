@@ -73,6 +73,7 @@ def _(executor: DuckDBData) -> list[tuple[str, int]]:
     return row
 
 
+# TODO: Remove SQL parameter from here
 def build_executor(sql: str, settings: Settings) -> DBExecutorData:
     if settings.is_dev:
         return DuckDBData(sql=sql, db_path=settings.duckdb_path or ":memory:")

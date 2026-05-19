@@ -1,9 +1,9 @@
 from enum import Enum
-from functools import singledispatch
+from functools import partial, singledispatch
 import logging
 import sys
 from dataclasses import asdict, dataclass
-from typing import Annotated, Iterable, Protocol, TypeAlias, Self, cast
+from typing import Annotated, Callable, Final, Iterable, Protocol, TypeAlias, Self, cast
 
 from fastapi import Depends, FastAPI, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -23,6 +23,19 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+
+
+@dataclass(frozen=True)
+class DateRange:
+    start_year: int
+    end_year: int
+
+
+PREPROCESSED_TABLE: Final = Table(constants.PREPROCESSED_TABLE_NAME)
+PREPROCESSED_DATE_RANGE: Final = DateRange(
+    constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR
+)
+RAW_TABLE: Final = Table(constants.UNPROCESSED_TABLE_NAME)
 
 
 class PosTag(str, Enum):
@@ -113,34 +126,87 @@ class FrequencyResponse:
     words: list[WordEntry]
 
 
+# TODO: Could this be done in an easier way?
 EndpointSerializer: TypeAlias = WordEntry | FrequencyResponse
 # TODO: Could probably just reference CommonParams ancestor
 EndpointParams: TypeAlias = TopWordsParams | WordFreqParams | WordsFreqParams
+# TODO: 2000-2019 works well, but 20005-2006 does not, for example.
+# TODO: Create a list of words to exclude from the word list
+# TODO: This is not quite async
+# TODO: Create custom typealias for list[tuple[str, int]], perhaps WordEntry could work? But that is only a serializer
+
+
+class SqlFn(Protocol):
+    def __call__(self) -> str: ...
+
+
+class ResponseFn(Protocol):
+    def __call__(self, rows: list[tuple[str, int]]) -> EndpointSerializer: ...
+
+
+class ExecuteFn(Protocol):
+    def __call__(self, sql: str) -> list[tuple[str, int]]: ...
 
 
 @dataclass(frozen=True)
-class DateRange:
-    start_year: int
-    end_year: int
+class QueryBuilderSet:
+    top_n: Callable[[int], str]
+    word: Callable[[str], str]
+    words: Callable[[list[str]], str]
 
 
-@dataclass(frozen=True)
-class TableContext:
-    pre_table: Table
-    raw_table: Table
+def preprocessed_builders() -> QueryBuilderSet:
+    return QueryBuilderSet(
+        top_n=build_preprocessed_query,
+        word=build_preprocessed_word_query,
+        words=build_preprocessed_words_query,
+    )
 
 
-@dataclass(frozen=True)
-class QueryContext:
-    table_context: TableContext
-    date_range: DateRange
+def unprocessed_builders(date_range: DateRange) -> QueryBuilderSet:
+    return QueryBuilderSet(
+        top_n=partial(build_unprocessed_query, date_range=date_range),
+        word=partial(build_unprocessed_word_query, date_range=date_range),
+        words=partial(build_unprocessed_words_query, date_range=date_range),
+    )
+
+
+def mixed_builders(date_range: DateRange) -> QueryBuilderSet:
+    return QueryBuilderSet(
+        top_n=partial(build_mixed_query, date_range=date_range),
+        word=partial(build_mixed_word_query, date_range=date_range),
+        words=partial(build_mixed_words_query, date_range=date_range),
+    )
+
+
+def get_query_builder(
+    query_date_range: DateRange,
+    processed_date_range: DateRange = PREPROCESSED_DATE_RANGE,
+) -> QueryBuilderSet:
+
+    if is_processed_range(query_date_range, processed_date_range):
+        return preprocessed_builders()
+
+    elif is_mixed_range(query_date_range, processed_date_range):
+        return mixed_builders(query_date_range)
+
+    elif is_unprocessed_range(query_date_range, processed_date_range):
+        return unprocessed_builders(query_date_range)
+
+    else:
+        raise ValueError(
+            f"No query builder strategy recognized for date range {query_date_range} "
+            f"against processed range {processed_date_range}"
+        )
 
 
 def build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
     return FrequencyResponse(words=[WordEntry(entry[0], entry[1]) for entry in rows])
 
 
-def build_preprocessed_query(preprocessed_table: Table, word_number: int) -> str:
+def build_preprocessed_query(
+    word_number: int, preprocessed_table: Table = PREPROCESSED_TABLE
+) -> str:
     return (
         PikaQuery.from_(preprocessed_table)
         .select(preprocessed_table.ngram, preprocessed_table.match_count)
@@ -151,21 +217,60 @@ def build_preprocessed_query(preprocessed_table: Table, word_number: int) -> str
 
 
 def build_unprocessed_query(
-    raw_table: Table, word_number: int, date_range: DateRange
+    word_number: int, date_range: DateRange, unprocessed_table: Table = RAW_TABLE
 ) -> str:
     return (
+        PikaQuery.from_(unprocessed_table)
+        .select(unprocessed_table.ngram, fn.Sum(unprocessed_table.match_count))
+        .where(
+            unprocessed_table.year.between(date_range.start_year, date_range.end_year)
+        )
+        .groupby(unprocessed_table.ngram)
+        .orderby(fn.Sum(unprocessed_table.match_count), order=Order.desc)
+        .limit(word_number)
+        .get_sql()
+    )
+
+
+def build_mixed_query(
+    word_number: int,
+    date_range: DateRange,
+    preprocessed_table: Table = PREPROCESSED_TABLE,
+    raw_table: Table = RAW_TABLE,
+    preprocessed_date_range: DateRange = DateRange(
+        constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR
+    ),
+) -> str:
+    raw = (
         PikaQuery.from_(raw_table)
-        .select(raw_table.ngram, fn.Sum(raw_table.match_count))
+        .select(raw_table.ngram, fn.Sum(raw_table.match_count).as_("match_count"))
         .where(raw_table.year.between(date_range.start_year, date_range.end_year))
+        .where(
+            raw_table.year.between(
+                preprocessed_date_range.start_year, preprocessed_date_range.end_year
+            ).negate()
+        )
         .groupby(raw_table.ngram)
-        .orderby(fn.Sum(raw_table.match_count), order=Order.desc)
+    )
+    preprocessed = PikaQuery.from_(preprocessed_table).select(
+        preprocessed_table.ngram, preprocessed_table.match_count
+    )
+
+    sub = raw.union_all(preprocessed).as_("combined")
+    return (
+        PikaQuery.from_(sub)
+        .select(sub.ngram, fn.Sum(sub.match_count))
+        .groupby(sub.ngram)
+        .orderby(fn.Sum(sub.match_count), order=Order.desc)
         .limit(word_number)
         .get_sql()
     )
 
 
 # TODO: Rename table parameter for consistency
-def build_preprocessed_word_query(preprocessed_table: Table, word: str) -> str:
+def build_preprocessed_word_query(
+    word: str, preprocessed_table: Table = PREPROCESSED_TABLE
+) -> str:
     return (
         PikaQuery.from_(preprocessed_table)
         .select(preprocessed_table.ngram, preprocessed_table.match_count)
@@ -175,15 +280,14 @@ def build_preprocessed_word_query(preprocessed_table: Table, word: str) -> str:
 
 
 def build_unprocessed_word_query(
-    raw_table: Table, word: str, date_range: DateRange
+    word: str, date_range: DateRange, raw_table: Table = RAW_TABLE
 ) -> str:
     return (
         PikaQuery.from_(raw_table)
         .select(raw_table.ngram, fn.Sum(raw_table.match_count))
         .where(
             raw_table.year.between(date_range.start_year, date_range.end_year)
-            & raw_table.ngram
-            == word
+            & (raw_table.ngram == word)
         )
         .groupby(raw_table.ngram)
         .orderby(fn.Sum(raw_table.match_count), order=Order.desc)
@@ -191,7 +295,44 @@ def build_unprocessed_word_query(
     )
 
 
-def build_preprocessed_words_query(preprocessed_table: Table, words: list[str]) -> str:
+def build_mixed_word_query(
+    word: str,
+    date_range: DateRange,
+    preprocessed_table: Table = PREPROCESSED_TABLE,
+    raw_table: Table = RAW_TABLE,
+    preprocessed_date_range: DateRange = DateRange(
+        constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR
+    ),
+) -> str:
+    raw = (
+        PikaQuery.from_(raw_table)
+        .select(raw_table.ngram, fn.Sum(raw_table.match_count).as_("match_count"))
+        .where(raw_table.year.between(date_range.start_year, date_range.end_year))
+        .where(
+            raw_table.year.between(
+                preprocessed_date_range.start_year, preprocessed_date_range.end_year
+            ).negate()
+        )
+        .where(raw_table.ngram == word)
+        .groupby(raw_table.ngram)
+    )
+    preprocessed = (
+        PikaQuery.from_(preprocessed_table)
+        .select(preprocessed_table.ngram, preprocessed_table.match_count)
+        .where(preprocessed_table.ngram == word)
+    )
+    sub = raw.union_all(preprocessed).as_("combined")
+    return (
+        PikaQuery.from_(sub)
+        .select(sub.ngram, fn.Sum(sub.match_count))
+        .groupby(sub.ngram)
+        .get_sql()
+    )
+
+
+def build_preprocessed_words_query(
+    words: list[str], preprocessed_table: Table = PREPROCESSED_TABLE
+) -> str:
     return (
         PikaQuery.from_(preprocessed_table)
         .select(preprocessed_table.ngram, preprocessed_table.match_count)
@@ -202,7 +343,7 @@ def build_preprocessed_words_query(preprocessed_table: Table, words: list[str]) 
 
 
 def build_unprocessed_words_query(
-    raw_table: Table, words: list[str], date_range: DateRange
+    words: list[str], date_range: DateRange, raw_table: Table = RAW_TABLE
 ) -> str:
     return (
         PikaQuery.from_(raw_table)
@@ -217,6 +358,42 @@ def build_unprocessed_words_query(
     )
 
 
+def build_mixed_words_query(
+    words: list[str],
+    date_range: DateRange,
+    preprocessed_table: Table = PREPROCESSED_TABLE,
+    raw_table: Table = RAW_TABLE,
+    preprocessed_range: DateRange = DateRange(
+        constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR
+    ),
+) -> str:
+    raw = (
+        PikaQuery.from_(raw_table)
+        .select(raw_table.ngram, fn.Sum(raw_table.match_count).as_("match_count"))
+        .where(raw_table.year.between(date_range.start_year, date_range.end_year))
+        .where(
+            raw_table.year.between(
+                preprocessed_range.start_year, preprocessed_range.end_year
+            ).negate()
+        )
+        .where(raw_table.ngram.isin(words))
+        .groupby(raw_table.ngram)
+    )
+    preprocessed = (
+        PikaQuery.from_(preprocessed_table)
+        .select(preprocessed_table.ngram, preprocessed_table.match_count)
+        .where(preprocessed_table.ngram.isin(words))
+    )
+    sub = raw.union_all(preprocessed).as_("combined")
+    return (
+        PikaQuery.from_(sub)
+        .select(sub.ngram, fn.Sum(sub.match_count))
+        .groupby(sub.ngram)
+        .orderby(fn.Sum(sub.match_count), order=Order.desc)
+        .get_sql()
+    )
+
+
 def build_single_response(row: tuple[str, int]) -> WordEntry:
 
     return WordEntry(
@@ -225,10 +402,37 @@ def build_single_response(row: tuple[str, int]) -> WordEntry:
     )
 
 
-def is_within_preprocessed_range(date_range: DateRange) -> bool:
+def is_processed_range(
+    query_date_range: DateRange,
+    processed_date_range: DateRange = PREPROCESSED_DATE_RANGE,
+) -> bool:
+    """Check if a given range is exactly the date range for processed data"""
     return (
-        date_range.start_year >= constants.PROCESSED_DATA_START_YEAR
-        and date_range.end_year <= constants.PROCESSED_DATA_END_YEAR
+        query_date_range.start_year == processed_date_range.start_year
+        and query_date_range.end_year == processed_date_range.end_year
+    )
+
+
+def is_mixed_range(
+    query_date_range: DateRange,
+    processed_date_range: DateRange = PREPROCESSED_DATE_RANGE,
+) -> bool:
+    """Check if a given range contains the processed range in its entirety"""
+    return (
+        query_date_range.start_year <= processed_date_range.start_year
+        and query_date_range.end_year >= processed_date_range.end_year
+        and not is_processed_range(query_date_range)
+    )
+
+
+def is_unprocessed_range(
+    query_date_range: DateRange,
+    processed_date_range: DateRange = PREPROCESSED_DATE_RANGE,
+) -> bool:
+    """Check if a given range does not overlap with the processed range"""
+    return (
+        query_date_range.start_year > processed_date_range.start_year
+        or query_date_range.end_year < processed_date_range.end_year
     )
 
 
@@ -238,80 +442,21 @@ def is_within_preprocessed_range(date_range: DateRange) -> bool:
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
-# TODO: 2000-2019 works well, but 20005-2006 does not, for example.
-# TODO: Create a list of words to exclude from the word list
-# TODO: This is not quite async
-# TODO: Create custom typealias for list[tuple[str, int]], perhaps WordEntry could work? But that is only a serializer
-
-
-class PreprocessedFn(Protocol):
-    def __call__(self) -> str: ...
-
-
-class UnprocessedFn(Protocol):
-    def __call__(self) -> str: ...
-
-
-class ResponseFn(Protocol):
-    def __call__(self, rows: list[tuple[str, int]]) -> EndpointSerializer: ...
-
-
-class ExecuteFn(Protocol):
-    def __call__(self, sql: str) -> list[tuple[str, int]]: ...
-
-
-def prepare_request_processing(
-    params_obj: CommonParams,
-    settings: Settings,
-    pre_tab_name: str = constants.PREPROCESSED_TABLE_NAME,
-    raw_tab_name: str = constants.UNPROCESSED_TABLE_NAME,
-) -> EndpointSerializer:
-    tab_ctx = TableContext(pre_table=Table(pre_tab_name), raw_table=Table(raw_tab_name))
-    date_range = DateRange(params_obj.start_year, params_obj.end_year)
-    query_ctx = QueryContext(tab_ctx, date_range)
-    return process_request(params_obj, settings, query_ctx)
-
-
-def run_query(
-    date_range: DateRange,
-    preprocessed_fn: PreprocessedFn,
-    unprocessed_fn: UnprocessedFn,
-    response_fn: ResponseFn,
-    execute_fn: ExecuteFn,
-) -> EndpointSerializer:
-    sql = (
-        preprocessed_fn()
-        if is_within_preprocessed_range(date_range)
-        else unprocessed_fn()
-    )
-    logger.info("Executing query: %s", sql)
-    # executor = build_executor(sql, settings)
-    return response_fn(execute_fn(sql))
-
-
 @singledispatch
 def process_request(
-    params: object, settings: Settings, query_ctx: QueryContext
+    params: object, settings: Settings, query_ctx: QueryBuilderSet
 ) -> EndpointSerializer:
     raise NotImplementedError(f"No handler for {type(params)}")
 
 
 @process_request.register
 def _(
-    params: TopWordsParams, settings: Settings, query_ctx: QueryContext
+    params: TopWordsParams, settings: Settings, query_builder: QueryBuilderSet
 ) -> FrequencyResponse:
     return cast(
         FrequencyResponse,
         run_query(
-            query_ctx.date_range,
-            preprocessed_fn=lambda: build_preprocessed_query(
-                query_ctx.table_context.pre_table, params.word_limit
-            ),
-            unprocessed_fn=lambda: build_unprocessed_query(
-                query_ctx.table_context.raw_table,
-                params.word_limit,
-                query_ctx.date_range,
-            ),
+            sql_fn=lambda: query_builder.top_n(params.word_limit),
             execute_fn=lambda sql: execute(build_executor(sql, settings)),
             response_fn=build_words_response,
         ),
@@ -319,17 +464,13 @@ def _(
 
 
 @process_request.register
-def _(params: WordFreqParams, settings: Settings, query_ctx: QueryContext) -> WordEntry:
+def _(
+    params: WordFreqParams, settings: Settings, query_builder: QueryBuilderSet
+) -> WordEntry:
     return cast(
         WordEntry,
         run_query(
-            query_ctx.date_range,
-            preprocessed_fn=lambda: build_preprocessed_word_query(
-                query_ctx.table_context.pre_table, params.word
-            ),
-            unprocessed_fn=lambda: build_unprocessed_word_query(
-                query_ctx.table_context.raw_table, params.word, query_ctx.date_range
-            ),
+            sql_fn=lambda: query_builder.word(params.word),
             execute_fn=lambda sql: execute(build_executor(sql, settings)),
             response_fn=lambda rows: build_single_response(rows[0]),
         ),
@@ -338,24 +479,36 @@ def _(params: WordFreqParams, settings: Settings, query_ctx: QueryContext) -> Wo
 
 @process_request.register
 def _(
-    params: WordsFreqParams, settings: Settings, query_ctx: QueryContext
+    params: WordsFreqParams, settings: Settings, query_builder: QueryBuilderSet
 ) -> FrequencyResponse:
-    words_list = [word for word in params.words]
 
     return cast(
         FrequencyResponse,
         run_query(
-            query_ctx.date_range,
-            preprocessed_fn=lambda: build_preprocessed_words_query(
-                query_ctx.table_context.pre_table, words_list
-            ),
-            unprocessed_fn=lambda: build_unprocessed_words_query(
-                query_ctx.table_context.raw_table, words_list, query_ctx.date_range
-            ),
+            sql_fn=lambda: query_builder.words(params.words),
             execute_fn=lambda sql: execute(build_executor(sql, settings)),
             response_fn=lambda rows: build_words_response(rows),
         ),
     )
+
+
+def prepare_request_processing(
+    params_obj: CommonParams,
+    settings: Settings,
+) -> EndpointSerializer:
+    date_range = DateRange(params_obj.start_year, params_obj.end_year)
+    query_builder = get_query_builder(date_range)
+    return process_request(params_obj, settings, query_builder)
+
+
+def run_query(
+    sql_fn: SqlFn,
+    response_fn: ResponseFn,
+    execute_fn: ExecuteFn,
+) -> EndpointSerializer:
+    sql = sql_fn()
+    logger.info("Executing query: %s", sql)
+    return response_fn(execute_fn(sql))
 
 
 @app.get("/top-words")
