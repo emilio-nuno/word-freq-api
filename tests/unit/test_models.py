@@ -44,7 +44,7 @@ def test_extra_fields_forbidden():
 
 def test_start_year_greater_than_end_year():
     """Test that start_year > end_year raises validation error."""
-    with pytest.raises(ValidationError, match="start_year.*must be <= end_year"):
+    with pytest.raises(ValidationError, match="start_year.*must be < end_year"):
         CommonParams(
             start_year=src_constants.RAW_DATA_END_YEAR,
             end_year=src_constants.RAW_DATA_START_YEAR,
