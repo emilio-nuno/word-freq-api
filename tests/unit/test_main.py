@@ -25,7 +25,7 @@ from src.main import (
 # --- is_within_preprocessed_range ---
 
 
-def test_within_preprocessed_range():
+def test_is_processed_range_exact_match_returns_true():
     assert is_processed_range(
         DateRange(
             src_constants.PROCESSED_DATA_START_YEAR,
@@ -34,13 +34,7 @@ def test_within_preprocessed_range():
     )
 
 
-def test_outside_preprocessed_range():
-    assert not is_processed_range(
-        DateRange(src_constants.RAW_DATA_START_YEAR, src_constants.RAW_DATA_END_YEAR)
-    )
-
-
-def test_start_year_before_preprocessed_boundary():
+def test_is_processed_range_start_before_returns_false():
     assert not is_processed_range(
         DateRange(
             src_constants.PROCESSED_DATA_START_YEAR - 1,
@@ -49,7 +43,7 @@ def test_start_year_before_preprocessed_boundary():
     )
 
 
-def test_end_year_after_preprocessed_boundary():
+def test_is_processed_range_end_after_returns_false():
     assert not is_processed_range(
         DateRange(
             src_constants.PROCESSED_DATA_START_YEAR,
@@ -58,16 +52,34 @@ def test_end_year_after_preprocessed_boundary():
     )
 
 
-def test_mixed_range_wider_on_both_sides():
-    assert is_mixed_range(
+def test_is_processed_range_raw_start_to_proc_start_returns_false():
+    assert not is_processed_range(
         DateRange(
-            src_constants.PROCESSED_DATA_START_YEAR - 1,
-            src_constants.PROCESSED_DATA_END_YEAR + 1,
+            src_constants.RAW_DATA_START_YEAR,
+            src_constants.PROCESSED_DATA_START_YEAR,
         )
     )
 
 
-def test_mixed_range_start_equal_end_beyond():
+def test_is_processed_range_proc_end_to_raw_end_returns_false():
+    assert not is_processed_range(
+        DateRange(
+            src_constants.PROCESSED_DATA_END_YEAR,
+            src_constants.RAW_DATA_END_YEAR,
+        )
+    )
+
+
+def test_is_processed_range_inner_subset_returns_false():
+    assert not is_processed_range(
+        DateRange(
+            src_constants.PROCESSED_DATA_START_YEAR + 1,
+            src_constants.PROCESSED_DATA_END_YEAR - 1,
+        )
+    )
+
+
+def test_is_mixed_range_start_at_proc_start_end_after_returns_true():
     assert is_mixed_range(
         DateRange(
             src_constants.PROCESSED_DATA_START_YEAR,
@@ -76,7 +88,7 @@ def test_mixed_range_start_equal_end_beyond():
     )
 
 
-def test_mixed_range_start_before_end_equal():
+def test_is_mixed_range_start_before_end_at_proc_end_returns_true():
     assert is_mixed_range(
         DateRange(
             src_constants.PROCESSED_DATA_START_YEAR - 1,
@@ -85,7 +97,25 @@ def test_mixed_range_start_before_end_equal():
     )
 
 
-def test_mixed_range_rejects_exact_processed_range():
+def test_is_mixed_range_raw_start_to_proc_start_returns_false():
+    assert not is_mixed_range(
+        DateRange(
+            src_constants.RAW_DATA_START_YEAR,
+            src_constants.PROCESSED_DATA_START_YEAR,
+        )
+    )
+
+
+def test_is_mixed_range_proc_end_to_raw_end_returns_false():
+    assert not is_mixed_range(
+        DateRange(
+            src_constants.PROCESSED_DATA_END_YEAR,
+            src_constants.RAW_DATA_END_YEAR,
+        )
+    )
+
+
+def test_is_mixed_range_exact_processed_range_returns_false():
     assert not is_mixed_range(
         DateRange(
             src_constants.PROCESSED_DATA_START_YEAR,
@@ -94,7 +124,7 @@ def test_mixed_range_rejects_exact_processed_range():
     )
 
 
-def test_mixed_range_rejects_range_within_processed_bounds():
+def test_is_mixed_range_inner_subset_returns_false():
     assert not is_mixed_range(
         DateRange(
             src_constants.PROCESSED_DATA_START_YEAR + 1,
@@ -103,25 +133,34 @@ def test_mixed_range_rejects_range_within_processed_bounds():
     )
 
 
-def test_unprocessed_range_entirely_before_processed():
+def test_is_unprocessed_range_raw_start_to_proc_start_returns_true():
     assert is_unprocessed_range(
         DateRange(
             src_constants.RAW_DATA_START_YEAR,
-            src_constants.PROCESSED_DATA_START_YEAR - 1,
+            src_constants.PROCESSED_DATA_START_YEAR,
         )
     )
 
 
-def test_unprocessed_range_entirely_after_processed():
+def test_is_unprocessed_range_proc_end_to_raw_end_returns_true():
     assert is_unprocessed_range(
         DateRange(
-            src_constants.PROCESSED_DATA_END_YEAR + 1,
+            src_constants.PROCESSED_DATA_END_YEAR,
             src_constants.RAW_DATA_END_YEAR,
         )
     )
 
 
-def test_unprocessed_range_rejects_exact_processed_range():
+def test_is_unprocessed_range_inner_subset_returns_true():
+    assert is_unprocessed_range(
+        DateRange(
+            src_constants.PROCESSED_DATA_START_YEAR + 1,
+            src_constants.PROCESSED_DATA_END_YEAR - 1,
+        )
+    )
+
+
+def test_is_unprocessed_range_exact_processed_range_returns_false():
     assert not is_unprocessed_range(
         DateRange(
             src_constants.PROCESSED_DATA_START_YEAR,
@@ -130,7 +169,7 @@ def test_unprocessed_range_rejects_exact_processed_range():
     )
 
 
-def test_unprocessed_range_rejects_wider_range():
+def test_is_unprocessed_range_wider_than_processed_returns_false():
     assert not is_unprocessed_range(
         DateRange(
             src_constants.PROCESSED_DATA_START_YEAR - 1,
@@ -144,7 +183,7 @@ def test_unprocessed_range_rejects_wider_range():
 
 def test_build_top_words_query_preprocessed_sql():
 
-    sql = build_preprocessed_query(tests_unit.SAMPLE_TOPWORDS_WORD_LIMIT)
+    sql = build_preprocessed_query(tests_unit.SAMPLE_WORD_LIMIT)
 
     assert sql == tests_unit.EXPECTED_PREPROCESSED_TOPWORDS_QUERY_SQL
 
@@ -154,7 +193,7 @@ def test_build_top_words_query_mixed_sql():
         tests_unit.SAMPLE_MIXED_START_YEAR, tests_unit.SAMPLE_MIXED_END_YEAR
     )
 
-    sql = build_mixed_query(tests_unit.SAMPLE_TOPWORDS_WORD_LIMIT, date_range)
+    sql = build_mixed_query(tests_unit.SAMPLE_WORD_LIMIT, date_range)
 
     assert sql == tests_unit.EXPECTED_MIXED_TOPWORDS_QUERY_SQL
 
@@ -164,7 +203,7 @@ def test_build_top_words_query_unprocessed_sql():
         tests_unit.SAMPLE_UNPROCESSED_START_YEAR, tests_unit.SAMPLE_UNPROCESSED_END_YEAR
     )
 
-    sql = build_unprocessed_query(tests_unit.SAMPLE_TOPWORDS_WORD_LIMIT, date_range)
+    sql = build_unprocessed_query(tests_unit.SAMPLE_WORD_LIMIT, date_range)
 
     assert sql == tests_unit.EXPECTED_UNPROCESSED_TOPWORDS_QUERY_SQL
 
@@ -174,7 +213,7 @@ def test_build_top_words_query_unprocessed_sql():
 
 def test_build_word_query_preprocessed_sql():
 
-    sql = build_preprocessed_word_query(tests_unit.SAMPLE_PROCESSED_WORD)
+    sql = build_preprocessed_word_query(tests_unit.SAMPLE_WORD)
 
     assert sql == tests_unit.EXPECTED_PREPROCESSED_WORD_QUERY_SQL
 
@@ -185,7 +224,7 @@ def test_build_word_query_mixed_sql():
         tests_unit.SAMPLE_MIXED_START_YEAR, tests_unit.SAMPLE_MIXED_END_YEAR
     )
 
-    sql = build_mixed_word_query(tests_unit.SAMPLE_MIXED_WORD, date_range)
+    sql = build_mixed_word_query(tests_unit.SAMPLE_WORD, date_range)
 
     assert sql == tests_unit.EXPECTED_MIXED_WORD_QUERY_SQL
 
@@ -196,7 +235,7 @@ def test_build_word_query_unprocessed_sql():
         tests_unit.SAMPLE_UNPROCESSED_START_YEAR, tests_unit.SAMPLE_UNPROCESSED_END_YEAR
     )
 
-    sql = build_unprocessed_word_query(tests_unit.SAMPLE_UNPROCESSED_WORD, date_range)
+    sql = build_unprocessed_word_query(tests_unit.SAMPLE_WORD, date_range)
 
     assert sql == tests_unit.EXPECTED_UNPROCESSED_WORD_QUERY_SQL
 
@@ -206,7 +245,7 @@ def test_build_word_query_unprocessed_sql():
 
 def test_build_words_query_preprocessed_sql():
 
-    sql = build_preprocessed_words_query(tests_unit.SAMPLE_PROCESSED_WORDS)
+    sql = build_preprocessed_words_query(tests_unit.SAMPLE_WORDS)
 
     assert sql == tests_unit.EXPECTED_PREPROCESSED_WORDS_QUERY_SQL
 
@@ -217,7 +256,7 @@ def test_build_words_query_mixed_sql():
         tests_unit.SAMPLE_MIXED_START_YEAR, tests_unit.SAMPLE_MIXED_END_YEAR
     )
 
-    sql = build_mixed_words_query(tests_unit.SAMPLE_MIXED_WORDS, date_range)
+    sql = build_mixed_words_query(tests_unit.SAMPLE_WORDS, date_range)
 
     assert sql == tests_unit.EXPECTED_MIXED_WORDS_QUERY_SQL
 
@@ -228,7 +267,7 @@ def test_build_words_query_unprocessed_sql():
         tests_unit.SAMPLE_UNPROCESSED_START_YEAR, tests_unit.SAMPLE_UNPROCESSED_END_YEAR
     )
 
-    sql = build_unprocessed_words_query(tests_unit.SAMPLE_UNPROCESSED_WORDS, date_range)
+    sql = build_unprocessed_words_query(tests_unit.SAMPLE_WORDS, date_range)
 
     assert sql == tests_unit.EXPECTED_UNPROCESSED_WORDS_QUERY_SQL
 
@@ -247,6 +286,3 @@ def test_build_top_words_response():
         build_words_response(tests_unit.SAMPLE_MULTIPLE_RESPONSE_INPUT)
         == tests_unit.EXPECTED_MULTIPLE_WORD_RESPONSE_OUTPUT
     )
-
-
-# TODO Add test for the functions from the new endpoint
