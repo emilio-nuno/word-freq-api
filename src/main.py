@@ -74,7 +74,7 @@ class CommonParams(BaseModel):
     def check_year_order(self) -> Self:
         if self.start_year > self.end_year:
             raise ValueError(
-                f"start_year ({self.start_year}) must be <= end_year ({self.end_year})"
+                f"start_year ({self.start_year}) must be < end_year ({self.end_year})"
             )
         return self
 
@@ -429,7 +429,7 @@ def is_unprocessed_range(
     query_date_range: DateRange,
     processed_date_range: DateRange = PREPROCESSED_DATE_RANGE,
 ) -> bool:
-    """Check if a given range does not overlap with the processed range"""
+    """Check if a given range does not completely overlap with the processed range"""
     return (
         query_date_range.start_year > processed_date_range.start_year
         or query_date_range.end_year < processed_date_range.end_year
