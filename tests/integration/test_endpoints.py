@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from fastapi import status
 
 # --- Top Words Tests ---
-# TODO: Add processed and unprocessed tests separately
 
 
 def test_top_words_response_structure_default_params(client: TestClient):
@@ -36,6 +35,23 @@ def test_top_words_response_structure_processed_params(client: TestClient):
     response_data = response.json()
 
     assert response_data == tests_integration.SAMPLE_PROCESSED_TOPWORDS_QUERY_RESPONSE
+
+    assert all(
+        isinstance(result["ngram"], str) and isinstance(result["count"], int)
+        for result in response_data["words"]
+    )
+
+
+def test_top_words_response_structure_mixed_params(client: TestClient):
+    """Test response has correct structure."""
+
+    response = client.get(
+        f"/top-words?word_limit={tests_integration.SAMPLE_TOPWORDS_WORD_LIMIT}&start_year={tests_integration.SAMPLE_MIXED_START_YEAR}&end_year={tests_integration.SAMPLE_MIXED_END_YEAR}"
+    )
+
+    response_data = response.json()
+
+    assert response_data == tests_integration.SAMPLE_MIXED_TOPWORDS_QUERY_RESPONSE
 
     assert all(
         isinstance(result["ngram"], str) and isinstance(result["count"], int)
@@ -174,6 +190,21 @@ def test_word_freq_response_structure_unprocessed_params(client: TestClient):
     assert isinstance(response_data["count"], int)
 
 
+def test_word_freq_response_structure_mixed_params(client: TestClient):
+    """Test response has correct structure with unprocessed input."""
+    response = client.get(
+        f"/word-freq?word={tests_integration.SAMPLE_MIXED_WORD}&start_year={tests_integration.SAMPLE_MIXED_START_YEAR}&end_year={tests_integration.SAMPLE_MIXED_END_YEAR}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+    response_data = response.json()
+
+    assert response_data == tests_integration.SAMPLE_MIXED_WORD_RESPONSE
+
+    assert isinstance(response_data["ngram"], str)
+    assert isinstance(response_data["count"], int)
+
+
 def test_word_freq_word_required(client: TestClient):
     """Test word parameter is required."""
     response = client.get("/word-freq")
@@ -262,6 +293,27 @@ def test_words_freq_response_structure_unprocessed_params(client: TestClient):
     response_data = response.json()
 
     assert response_data == tests_integration.SAMPLE_UNPROCESSED_WORDS_QUERY_RESPONSE
+
+    assert all(
+        isinstance(result["ngram"], str) and isinstance(result["count"], int)
+        for result in response_data["words"]
+    )
+
+
+def test_words_freq_response_structure_mixed_params(client: TestClient):
+    """Test response has correct structure."""
+    words_url = "&".join(
+        ["words=" + word for word in tests_integration.SAMPLE_MIXED_WORDS]
+    )
+    response = client.get(
+        f"/words-freq?{words_url}&start_year={tests_integration.SAMPLE_MIXED_START_YEAR}&end_year={tests_integration.SAMPLE_MIXED_END_YEAR}"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    response_data = response.json()
+
+    assert response_data == tests_integration.SAMPLE_MIXED_WORDS_QUERY_RESPONSE
 
     assert all(
         isinstance(result["ngram"], str) and isinstance(result["count"], int)

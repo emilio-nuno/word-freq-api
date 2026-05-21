@@ -3,7 +3,6 @@ import tempfile
 from fastapi.testclient import TestClient
 import pytest
 
-# TODO: Remove and use abstractions
 import duckdb
 import src.constants as src_constants
 from typing import Generator
