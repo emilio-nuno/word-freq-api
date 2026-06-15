@@ -24,20 +24,22 @@ def build_test_db() -> Generator[str]:
         temp_db_path: str = os.path.join(temp_dir, SAMPLE_DB_PATH)
 
         with duckdb.connect(temp_db_path) as conn:
+            conn.execute(f"CREATE SCHEMA IF NOT EXISTS {src_constants.DB_NAME}")
+
             conn.execute(f"""
-                CREATE TABLE {src_constants.PREPROCESSED_TABLE_NAME} (
+                CREATE TABLE {src_constants.DB_NAME}.{src_constants.PREPROCESSED_TABLE_NAME} (
                     ngram VARCHAR,
                     match_count BIGINT
                 )
             """)
 
             conn.executemany(
-                f"INSERT INTO {src_constants.PREPROCESSED_TABLE_NAME} VALUES (?, ?)",
+                f"INSERT INTO {src_constants.DB_NAME}.{src_constants.PREPROCESSED_TABLE_NAME} VALUES (?, ?)",
                 SAMPLE_PROCESSED_DATA,
             )
 
             conn.execute(f"""
-                CREATE TABLE {src_constants.UNPROCESSED_TABLE_NAME} (
+                CREATE TABLE {src_constants.DB_NAME}.{src_constants.UNPROCESSED_TABLE_NAME} (
                     ngram VARCHAR,
                     year INTEGER,
                     match_count BIGINT
@@ -45,7 +47,7 @@ def build_test_db() -> Generator[str]:
             """)
 
             conn.executemany(
-                f"INSERT INTO {src_constants.UNPROCESSED_TABLE_NAME} VALUES (?, ?, ?)",
+                f"INSERT INTO {src_constants.DB_NAME}.{src_constants.UNPROCESSED_TABLE_NAME} VALUES (?, ?, ?)",
                 SAMPLE_UNPROCESSED_DATA,
             )
 

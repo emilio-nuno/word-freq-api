@@ -5,8 +5,11 @@ from typing import Generator, Protocol, cast
 
 from duckdb import DuckDBPyConnection
 from google.cloud.bigquery import Client
+from opentelemetry import trace
 
+from src import constants
 from src.settings import Settings
+# TODO: Table name to be put into executors, sourced from global constants
 
 
 class DBExecutorData(Protocol):
@@ -76,8 +79,17 @@ def _(executor: DuckDBData) -> list[tuple[str, int]]:
 # TODO: Remove SQL parameter from here
 def build_executor(sql: str, settings: Settings) -> DBExecutorData:
     if settings.is_dev:
+        current_span = trace.get_current_span()
+        current_span.set_attribute("db.system.name", "duckdb")
+        current_span.set_attribute("db.namespace", constants.DB_NAME)
+
         return DuckDBData(sql=sql, db_path=settings.duckdb_path or ":memory:")
     elif settings.is_prod:
+        current_span = trace.get_current_span()
+        current_span.set_attribute("db.system.name", "bigquery")
+        current_span.set_attribute("cloud.account.id", str(settings.project_id))
+        current_span.set_attribute("cloud.provider", "gcp")
+
         return BigqueryData(sql=sql, project_id=settings.project_id or "dummy_project")
     else:
         raise ValueError("Unknown environment")

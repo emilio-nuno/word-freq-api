@@ -5,16 +5,24 @@ import sys
 from dataclasses import asdict, dataclass
 from typing import Annotated, Callable, Final, Iterable, Protocol, TypeAlias, Self, cast
 
-from fastapi import Depends, FastAPI, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pypika import Order
 from pypika import Query as PikaQuery
 from pypika import Table
 from pypika import functions as fn
+from opentelemetry import trace
+from opentelemetry.instrumentation.auto_instrumentation import initialize
+
+initialize()
+
+from fastapi import Depends, FastAPI, Query
 
 from src import constants
 from src.db import build_executor, execute
 from src.settings import Settings, get_settings
+
+
+tracer = trace.get_tracer(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +39,13 @@ class DateRange:
     end_year: int
 
 
-PREPROCESSED_TABLE: Final = Table(constants.PREPROCESSED_TABLE_NAME)
+PREPROCESSED_TABLE: Final = Table(
+    constants.PREPROCESSED_TABLE_NAME, schema=constants.DB_NAME
+)
 PREPROCESSED_DATE_RANGE: Final = DateRange(
     constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR
 )
-RAW_TABLE: Final = Table(constants.UNPROCESSED_TABLE_NAME)
+RAW_TABLE: Final = Table(constants.UNPROCESSED_TABLE_NAME, schema=constants.DB_NAME)
 
 
 class PosTag(str, Enum):
@@ -130,7 +140,6 @@ class FrequencyResponse:
 EndpointSerializer: TypeAlias = WordEntry | FrequencyResponse
 # TODO: Could probably just reference CommonParams ancestor
 EndpointParams: TypeAlias = TopWordsParams | WordFreqParams | WordsFreqParams
-# TODO: 2000-2019 works well, but 20005-2006 does not, for example.
 # TODO: Create a list of words to exclude from the word list
 # TODO: This is not quite async
 # TODO: Create custom typealias for list[tuple[str, int]], perhaps WordEntry could work? But that is only a serializer
@@ -184,13 +193,18 @@ def get_query_builder(
     processed_date_range: DateRange = PREPROCESSED_DATE_RANGE,
 ) -> QueryBuilderSet:
 
+    current_span = trace.get_current_span()
+
     if is_processed_range(query_date_range, processed_date_range):
+        current_span.set_attribute("range_type", "processed")
         return preprocessed_builders()
 
     elif is_mixed_range(query_date_range, processed_date_range):
+        current_span.set_attribute("range_type", "mixed")
         return mixed_builders(query_date_range)
 
     elif is_unprocessed_range(query_date_range, processed_date_range):
+        current_span.set_attribute("range_type", "unprocessed")
         return unprocessed_builders(query_date_range)
 
     else:
@@ -207,7 +221,18 @@ def build_words_response(rows: Iterable[tuple[str, int]]) -> FrequencyResponse:
 def build_preprocessed_query(
     word_number: int, preprocessed_table: Table = PREPROCESSED_TABLE
 ) -> str:
-    return (
+    current_span = trace.get_current_span()
+
+    current_span.set_attribute(
+        "db.query.summary",
+        f"SELECT {preprocessed_table.get_table_name()}",
+    )
+    current_span.set_attribute(
+        "db.collection.name",
+        f"{constants.DB_NAME}.{preprocessed_table.get_table_name()}",
+    )
+
+    query = (
         PikaQuery.from_(preprocessed_table)
         .select(preprocessed_table.ngram, preprocessed_table.match_count)
         .orderby(preprocessed_table.match_count, order=Order.desc)
@@ -215,11 +240,25 @@ def build_preprocessed_query(
         .get_sql()
     )
 
+    current_span.set_attribute("db.query.text", query)
+
+    return query
+
 
 def build_unprocessed_query(
     word_number: int, date_range: DateRange, unprocessed_table: Table = RAW_TABLE
 ) -> str:
-    return (
+    current_span = trace.get_current_span()
+    current_span.set_attribute(
+        "db.query.summary",
+        f"SELECT {unprocessed_table.get_table_name()}",
+    )
+    current_span.set_attribute(
+        "db.collection.name",
+        f"{constants.DB_NAME}.{unprocessed_table.get_table_name()}",
+    )
+
+    query = (
         PikaQuery.from_(unprocessed_table)
         .select(unprocessed_table.ngram, fn.Sum(unprocessed_table.match_count))
         .where(
@@ -231,6 +270,10 @@ def build_unprocessed_query(
         .get_sql()
     )
 
+    current_span.set_attribute("db.query.text", query)
+
+    return query
+
 
 def build_mixed_query(
     word_number: int,
@@ -241,6 +284,11 @@ def build_mixed_query(
         constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR
     ),
 ) -> str:
+    current_span = trace.get_current_span()
+    current_span.set_attribute(
+        "db.query.summary",
+        f"SELECT SELECT {raw_table.get_table_name()} SELECT {preprocessed_table.get_table_name()}",
+    )
     raw = (
         PikaQuery.from_(raw_table)
         .select(raw_table.ngram, fn.Sum(raw_table.match_count).as_("match_count"))
@@ -257,7 +305,7 @@ def build_mixed_query(
     )
 
     sub = raw.union_all(preprocessed).as_("combined")
-    return (
+    query = (
         PikaQuery.from_(sub)
         .select(sub.ngram, fn.Sum(sub.match_count))
         .groupby(sub.ngram)
@@ -265,24 +313,49 @@ def build_mixed_query(
         .limit(word_number)
         .get_sql()
     )
+    current_span.set_attribute("db.query.text", query)
+    return query
 
 
-# TODO: Rename table parameter for consistency
 def build_preprocessed_word_query(
     word: str, preprocessed_table: Table = PREPROCESSED_TABLE
 ) -> str:
-    return (
+    current_span = trace.get_current_span()
+    current_span.set_attribute(
+        "db.query.summary",
+        f"SELECT {preprocessed_table.get_table_name()}",
+    )
+    current_span.set_attribute(
+        "db.collection.name",
+        f"{constants.DB_NAME}.{preprocessed_table.get_table_name()}",
+    )
+
+    query = (
         PikaQuery.from_(preprocessed_table)
         .select(preprocessed_table.ngram, preprocessed_table.match_count)
         .where(preprocessed_table.ngram == word)
         .get_sql()
     )
 
+    current_span.set_attribute("db.query.text", query)
+
+    return query
+
 
 def build_unprocessed_word_query(
     word: str, date_range: DateRange, raw_table: Table = RAW_TABLE
 ) -> str:
-    return (
+    current_span = trace.get_current_span()
+    current_span.set_attribute(
+        "db.query.summary",
+        f"SELECT {raw_table.get_table_name()}",
+    )
+    current_span.set_attribute(
+        "db.collection.name",
+        f"{constants.DB_NAME}.{raw_table.get_table_name()}",
+    )
+
+    query = (
         PikaQuery.from_(raw_table)
         .select(raw_table.ngram, fn.Sum(raw_table.match_count))
         .where(
@@ -294,6 +367,10 @@ def build_unprocessed_word_query(
         .get_sql()
     )
 
+    current_span.set_attribute("db.query.text", query)
+
+    return query
+
 
 def build_mixed_word_query(
     word: str,
@@ -304,6 +381,11 @@ def build_mixed_word_query(
         constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR
     ),
 ) -> str:
+    current_span = trace.get_current_span()
+    current_span.set_attribute(
+        "db.query.summary",
+        f"SELECT SELECT {raw_table.get_table_name()} SELECT {preprocessed_table.get_table_name()}",
+    )
     raw = (
         PikaQuery.from_(raw_table)
         .select(raw_table.ngram, fn.Sum(raw_table.match_count).as_("match_count"))
@@ -322,18 +404,30 @@ def build_mixed_word_query(
         .where(preprocessed_table.ngram == word)
     )
     sub = raw.union_all(preprocessed).as_("combined")
-    return (
+    query = (
         PikaQuery.from_(sub)
         .select(sub.ngram, fn.Sum(sub.match_count))
         .groupby(sub.ngram)
         .get_sql()
     )
+    current_span.set_attribute("db.query.text", query)
+    return query
 
 
 def build_preprocessed_words_query(
     words: list[str], preprocessed_table: Table = PREPROCESSED_TABLE
 ) -> str:
-    return (
+    current_span = trace.get_current_span()
+    current_span.set_attribute(
+        "db.query.summary",
+        f"SELECT {preprocessed_table.get_table_name()}",
+    )
+    current_span.set_attribute(
+        "db.collection.name",
+        f"{constants.DB_NAME}.{preprocessed_table.get_table_name()}",
+    )
+
+    query = (
         PikaQuery.from_(preprocessed_table)
         .select(preprocessed_table.ngram, preprocessed_table.match_count)
         .where(preprocessed_table.ngram.isin(words))
@@ -341,11 +435,25 @@ def build_preprocessed_words_query(
         .get_sql()
     )
 
+    current_span.set_attribute("db.query.text", query)
+
+    return query
+
 
 def build_unprocessed_words_query(
     words: list[str], date_range: DateRange, raw_table: Table = RAW_TABLE
 ) -> str:
-    return (
+    current_span = trace.get_current_span()
+    current_span.set_attribute(
+        "db.query.summary",
+        f"SELECT {raw_table.get_table_name()}",
+    )
+    current_span.set_attribute(
+        "db.collection.name",
+        f"{constants.DB_NAME}.{raw_table.get_table_name()}",
+    )
+
+    query = (
         PikaQuery.from_(raw_table)
         .select(raw_table.ngram, fn.Sum(raw_table.match_count))
         .where(
@@ -357,23 +465,32 @@ def build_unprocessed_words_query(
         .get_sql()
     )
 
+    current_span.set_attribute("db.query.text", query)
+
+    return query
+
 
 def build_mixed_words_query(
     words: list[str],
     date_range: DateRange,
     preprocessed_table: Table = PREPROCESSED_TABLE,
     raw_table: Table = RAW_TABLE,
-    preprocessed_range: DateRange = DateRange(
+    preprocessed_date_range: DateRange = DateRange(
         constants.PROCESSED_DATA_START_YEAR, constants.PROCESSED_DATA_END_YEAR
     ),
 ) -> str:
+    current_span = trace.get_current_span()
+    current_span.set_attribute(
+        "db.query.summary",
+        f"SELECT SELECT {raw_table.get_table_name()} SELECT {preprocessed_table.get_table_name()}",
+    )
     raw = (
         PikaQuery.from_(raw_table)
         .select(raw_table.ngram, fn.Sum(raw_table.match_count).as_("match_count"))
         .where(raw_table.year.between(date_range.start_year, date_range.end_year))
         .where(
             raw_table.year.between(
-                preprocessed_range.start_year, preprocessed_range.end_year
+                preprocessed_date_range.start_year, preprocessed_date_range.end_year
             ).negate()
         )
         .where(raw_table.ngram.isin(words))
@@ -385,13 +502,15 @@ def build_mixed_words_query(
         .where(preprocessed_table.ngram.isin(words))
     )
     sub = raw.union_all(preprocessed).as_("combined")
-    return (
+    query = (
         PikaQuery.from_(sub)
         .select(sub.ngram, fn.Sum(sub.match_count))
         .groupby(sub.ngram)
         .orderby(fn.Sum(sub.match_count), order=Order.desc)
         .get_sql()
     )
+    current_span.set_attribute("db.query.text", query)
+    return query
 
 
 def build_single_response(row: tuple[str, int]) -> WordEntry:
@@ -506,9 +625,20 @@ def run_query(
     response_fn: ResponseFn,
     execute_fn: ExecuteFn,
 ) -> EndpointSerializer:
-    sql = sql_fn()
-    logger.info("Executing query: %s", sql)
-    return response_fn(execute_fn(sql))
+    with tracer.start_as_current_span(
+        "SELECT ngrams",
+        kind=trace.SpanKind.CLIENT,
+        attributes={"db.operation.name": "SELECT"},
+    ) as span:
+        sql = sql_fn()
+        rows = execute_fn(sql)
+        span.set_attribute("db.response.returned_rows", len(rows))
+
+        summary = getattr(span, "attributes", {}).get("db.query.summary")
+        if summary:
+            span.update_name(str(summary))
+
+        return response_fn(rows)
 
 
 @app.get("/top-words")
@@ -517,7 +647,6 @@ async def get_top_words(
     settings: SettingsDep,
 ) -> FrequencyResponse:
     response = cast(FrequencyResponse, prepare_request_processing(params, settings))
-    logger.info("Response: %s", asdict(response))
     return response
 
 

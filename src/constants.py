@@ -21,7 +21,7 @@ POS_TAG_MAP: Final[dict[str, str]] = {
 }
 
 # DB constants
-DB_NAME: Final[str] = "data/ngrams.duckdb"
+DB_NAME: Final[str] = "ngrams"
 PREPROCESSED_TABLE_NAME: Final[str] = "gold_ngram_2000_2019"
 UNPROCESSED_TABLE_NAME: Final[str] = "gold_ngrams_sorted"
 
