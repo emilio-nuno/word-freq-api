@@ -62,7 +62,7 @@ def client(build_test_db: str) -> TestClient:
     from src.main import app
 
     app.dependency_overrides[get_settings] = lambda: Settings(
-        env=Envs.DEV,
+        app_env=Envs.DEV,
         duckdb_path=build_test_db,
     )
 
