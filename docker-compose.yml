@@ -1,0 +1,31 @@
+services:
+  jaeger:
+    image: jaegertracing/all-in-one
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"
+
+  otel-collector:
+    image: otel/opentelemetry-collector
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    command: ["--config=/etc/otel/config.yaml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - jaeger
+
+  api:
+    build: .
+    volumes:
+      - ${DATA_DIR:-./data}:/data:ro
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DUCKDB_PATH: /data/ngrams.duckdb
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "8000:8000"
+    depends_on:
+      - otel-collector

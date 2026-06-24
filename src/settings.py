@@ -17,17 +17,17 @@ class Settings(BaseSettings):
         - PROD: Uses BigQuery as the database backend.
     """
 
-    env: Envs = Envs.DEV
+    app_env: Envs = Envs.DEV
     project_id: str | None = None
     duckdb_path: str | None = None
 
     @property
     def is_dev(self) -> bool:
-        return self.env == Envs.DEV
+        return self.app_env == Envs.DEV
 
     @property
     def is_prod(self) -> bool:
-        return self.env == Envs.PROD
+        return self.app_env == Envs.PROD
 
 
 def get_settings() -> Settings:
