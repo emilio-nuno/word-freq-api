@@ -1,10 +1,23 @@
 services:
   jaeger:
-    image: jaegertracing/all-in-one
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
+    image: jaegertracing/jaeger:latest
+    command: ["--config=/etc/jaeger/config.yaml"]
+    volumes:
+      - jaeger_badger_data:/badger
+      - ./jaeger-config.yaml:/etc/jaeger/config.yaml:ro
     ports:
       - "16686:16686"
+    depends_on:
+      prepare-data-dir:
+        condition: service_completed_successfully
+
+  prepare-data-dir:
+    user: root
+    image: busybox:latest
+    command: "sh -c 'mkdir -p /badger/data && chown -R 10001:10001 /badger/data'"
+    volumes:
+      - jaeger_badger_data:/badger
+
 
   otel-collector:
     image: otel/opentelemetry-collector
@@ -17,15 +30,20 @@ services:
     depends_on:
       - jaeger
 
-  api:
+  wordfreq-api:
     build: .
+    image: enuno/word-freq-api:latest
     volumes:
       - ${DATA_DIR:-./data}:/data:ro
     environment:
       APP_ENV: ${APP_ENV:-dev}
       DUCKDB_PATH: /data/ngrams.duckdb
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: "wordfreq-api"
     ports:
       - "8000:8000"
     depends_on:
       - otel-collector
+
+volumes:
+  jaeger_badger_data:

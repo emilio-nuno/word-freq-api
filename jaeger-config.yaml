@@ -1,0 +1,39 @@
+extensions:
+  jaeger_query:
+    storage:
+      traces: some_store
+
+  jaeger_storage:
+    backends:
+      some_store:
+        badger:
+          directories:
+            keys: "/badger/data/keys"
+            values: "/badger/data/values"
+          ephemeral: false
+          consistency: true
+          ttl:
+            spans: 72h
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: some_store
+
+service:
+  extensions: [jaeger_storage, jaeger_query]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
